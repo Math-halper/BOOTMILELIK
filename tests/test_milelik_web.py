@@ -196,6 +196,11 @@ class TestMilelikWebServer(unittest.TestCase):
 
         status, _js, _headers = self.request("/app.js", token=None)
         self.assertEqual(status, 200)
+        status, favicon, headers = self.request(
+            "/favicon.svg", token=None, raw=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get_content_type(), "image/svg+xml")
+        self.assertTrue(favicon.lstrip().startswith(b"<svg"))
         status, error, _headers = self.request("/api/status", token=None)
         self.assertEqual(status, 401)
         self.assertIn("token", error["error"].lower())
@@ -461,6 +466,15 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             "--text: #f2f2f0", "clip-path: polygon(14px 0",
         ):
             self.assertIn(needle, css)
+
+        favicon = (ROOT / "frontend" / "favicon.svg").read_text()
+        self.assertTrue(favicon.lstrip().startswith("<svg"))
+        self.assertIn('type="image/svg+xml" href="/favicon.svg"', html)
+        combined = (html + js + css).lower()
+        self.assertNotIn("<img", combined)
+        for raster in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
+                       "data:image/png", "data:image/jpeg", "data:image/gif"):
+            self.assertNotIn(raster, combined)
 
     def test_scripted_installer_wizard_saves_preferences(self):
         with tempfile.TemporaryDirectory() as tmp:

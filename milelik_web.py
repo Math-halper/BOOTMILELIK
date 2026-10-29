@@ -1584,11 +1584,13 @@ class MilelikHandler(BaseHTTPRequestHandler):
                     return
                 self._serve_static("index.html")
                 return
-            if path in ("/styles.css", "/app.js"):
+            if path in ("/styles.css", "/app.js", "/favicon.svg"):
                 self._serve_static(path.lstrip("/"))
                 return
             if path == "/favicon.ico":
-                self._send_bytes(b"", "image/x-icon", HTTPStatus.NO_CONTENT)
+                # Browsers may still ask for the legacy name; Milelik only
+                # ships SVG artwork, so return the SVG icon for that request.
+                self._serve_static("favicon.svg")
                 return
             if path == "/api/health":
                 self._send_json({"ok": True, "service": "milelik",

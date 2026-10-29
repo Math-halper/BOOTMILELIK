@@ -58,6 +58,8 @@ LAUNCH_AFTER_INSTALL="${LAUNCH_AFTER_INSTALL:-none}"
 
 ASSUME_YES=0
 FORCE_WIZARD=0
+BROWSER_SETUP=0
+INSTALLER_ARG_COUNT=$#
 SKIP_CHECK="${SKIP_CHECK:-0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,9 +75,11 @@ Usage:
   ./install.sh [--yes] [options]
 
 Interactive mode:
-  (default in a terminal)  Ask about model, dependencies, safety, front end,
-                           workspace, theme and GitHub preferences
-  --wizard                 Force the preference questions
+  (default on a desktop)   Open the browser setup page for model, dependencies,
+                           safety, front end, workspace and theme preferences
+  --browser-setup          Force the browser setup page
+  --wizard, --terminal-setup
+                           Force the old terminal preference questions
   --yes, -y                Install with defaults / environment values
   --non-interactive        Same as --yes
 
@@ -133,7 +137,8 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
         -y|--yes|--non-interactive|--noninteractive) ASSUME_YES=1 ;;
-        --wizard) FORCE_WIZARD=1 ;;
+        --browser-setup) BROWSER_SETUP=1 ;;
+        --wizard|--terminal-setup) FORCE_WIZARD=1 ;;
         --skip-check) SKIP_CHECK=1 ;;
         --model) need_value "$@"; MODEL="$2"; MODEL_WAS_SET=1; shift ;;
         --gguf) need_value "$@"; GGUF="$2"; MODEL_SOURCE="gguf"; shift ;;
@@ -499,6 +504,64 @@ if [ "${EUID:-1}" -eq 0 ] && [ "${MILELIK_ALLOW_ROOT:-0}" != "1" ]; then
     echo "of your own account. Set MILELIK_ALLOW_ROOT=1 only for a root-only test" >&2
     echo "environment." >&2
     exit 2
+fi
+
+# A plain interactive ./install.sh now opens Milelik's browser setup page.
+# The Python setup script collects the same preferences there, then calls
+# this installer back with --yes. Use --wizard/--terminal-setup for the old
+# terminal questions, or --yes for unattended defaults.
+OPEN_BROWSER_SETUP=0
+if [ "$BROWSER_SETUP" = "1" ]; then
+    OPEN_BROWSER_SETUP=1
+elif [ "$INSTALLER_ARG_COUNT" = "0" ] && [ "$ASSUME_YES" = "0" ] && \
+     [ "$FORCE_WIZARD" = "0" ] && [ -t 0 ] && [ -t 1 ] && \
+     { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; then
+    OPEN_BROWSER_SETUP=1
+fi
+if [ "$OPEN_BROWSER_SETUP" = "1" ] && \
+   { [ "$ASSUME_YES" = "1" ] || [ "$FORCE_WIZARD" = "1" ] || \
+     [ -n "${MILELIK_BROWSER_SETUP_ACTIVE:-}" ]; }; then
+    OPEN_BROWSER_SETUP=0
+fi
+if [ "$OPEN_BROWSER_SETUP" = "1" ] && \
+   { [ ! -f "$SCRIPT_DIR/setup_milelik.py" ] || ! command -v python3 >/dev/null 2>&1; }; then
+    if [ "$BROWSER_SETUP" = "1" ]; then
+        echo "Browser setup needs python3 and setup_milelik.py beside install.sh." >&2
+        exit 2
+    fi
+    OPEN_BROWSER_SETUP=0
+fi
+if [ "$OPEN_BROWSER_SETUP" = "1" ]; then
+    setup_args=(--browser-setup)
+    [ "$SKIP_CHECK" = "1" ] && setup_args+=(--skip-check)
+    [ "$MODEL_WAS_SET" = "1" ] && setup_args+=(--model "$MODEL")
+    [ -n "$GGUF" ] && setup_args+=(--gguf "$GGUF")
+    [ -n "$MODELS_DIR" ] && setup_args+=(--models-dir "$MODELS_DIR")
+    [ -n "$MODEL_FILE" ] && setup_args+=(--model-file "$MODEL_FILE")
+    [ "$MODEL_DISCOVERY" = "0" ] && setup_args+=(--no-model-scan)
+    [ "$BACKEND" != "auto" ] && setup_args+=(--backend "$BACKEND")
+    [ -n "$MODEL_HOST" ] && setup_args+=(--host "$MODEL_HOST")
+    setup_args+=(--dependency-mode "$DEPENDENCY_MODE")
+    setup_args+=(--workspace "$WORKSPACE_DIR" --web-host "$WEB_HOST" --web-port "$WEB_PORT")
+    if [ "$LAUNCH_WAS_SET" = "1" ]; then
+        case "$LAUNCH_AFTER_INSTALL" in
+            frontend) setup_args+=(--gui) ;;
+            cli) setup_args+=(--cli) ;;
+            none) setup_args+=(--no-launch) ;;
+        esac
+    fi
+    echo "Opening Milelik setup in your browser…"
+    exec env \
+        MILELIK_BROWSER_SETUP_ACTIVE=1 \
+        MODEL_SOURCE="$MODEL_SOURCE" \
+        PERFORMANCE_PROFILE="$PERFORMANCE_PROFILE" \
+        AUTO_APPROVE="$AUTO_APPROVE" \
+        FRONTEND_ENABLED="$FRONTEND_ENABLED" \
+        OPEN_BROWSER="$OPEN_BROWSER" \
+        UI_THEME="$UI_THEME" \
+        UI_DEFAULT_VIEW="$UI_DEFAULT_VIEW" \
+        GITHUB_LOGIN="$GITHUB_LOGIN" \
+        python3 "$SCRIPT_DIR/setup_milelik.py" "${setup_args[@]}"
 fi
 
 INTERACTIVE=0

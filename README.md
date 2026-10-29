@@ -31,7 +31,7 @@ Terminal ───────────────────────�
 Pure Python standard library, **zero pip dependencies**. At startup Milelik
 reads every AI model file in its `models/` folder and chooses a runnable GGUF
 from what it finds; the bundled SmolLM2 file is preferred on a fresh setup.
-The guided installer asks for your model, safety, workspace and front-end
+The browser setup page asks for your model, safety, workspace and front-end
 preferences. Every system dependency is declared in this repository under
 [`dependencies/`](dependencies/) and installed automatically, so there are no
 extra dependency commands to run by hand.
@@ -157,10 +157,14 @@ cd BOOTMILELIK
 python3 setup_milelik.py
 ```
 
-That Python setup script is the easiest way to start. It checks Python and
-the `models/` folder, shows which model file Milelik will choose, runs the
-bundled guided installer, and then starts the browser front end in the same
-terminal.
+That Python setup script is the easiest way to start. On a desktop it opens
+Milelik's **browser setup page** instead of asking setup questions in the
+terminal. The local page lets you choose the model, dependencies, safety,
+workspace, front-end/theme and launch options; then it runs the bundled
+installer and opens the Milelik front end. The terminal only remains the
+place linux may ask for your sudo password for system packages. Use
+`--terminal-setup` for the old terminal questions or `--yes` for unattended
+defaults.
 
 > **Do not run the setup script with `sudo`.** Run
 > `python3 setup_milelik.py` as your normal user; the installer asks for sudo
@@ -173,7 +177,9 @@ terminal.
 Useful forms include:
 
 ```bash
-python3 setup_milelik.py                 # guided setup, then open the front end
+python3 setup_milelik.py                 # open browser setup, then the front end
+python3 setup_milelik.py --browser-setup # force the browser setup page
+python3 setup_milelik.py --terminal-setup # use the old terminal questions
 python3 setup_milelik.py --yes           # default setup, then open the front end
 python3 setup_milelik.py --run-only      # skip installation; run from this folder
 python3 setup_milelik.py --run-only --cli
@@ -183,9 +189,8 @@ python3 setup_milelik.py --check
 python3 setup_milelik.py --dry-run       # show the commands without running them
 ```
 
-You can also run `bash install.sh` directly. In a terminal it opens Milelik's
-**7-step setup wizard**. Press Enter to accept a highlighted default, or
-choose:
+You can also run `bash install.sh` directly. With no options on a desktop it
+delegates to the same **browser setup page**. In the browser you can choose:
 
 1. Dependency set (full/core/optional/none)
 2. Where the model comes from: the bundled SmolLM2 GGUF, your existing GGUF,
@@ -198,15 +203,16 @@ choose:
 6. Optional GitHub login
 7. What to open when installation finishes
 
-It shows a summary before changing anything, saves the answers to
+When you submit the page, Milelik saves the answers to
 `~/.config/milelik/config.json`, installs **all declared dependencies**, sets
 up the bundled **SmolLM2-135M-Instruct-Q4_1** unless you selected another
 model/server, and adds both **Milelik** and **Milelik Workspace** to
 your app menu.
 
 ```bash
-bash install.sh              # friendly preference wizard in a terminal
-bash install.sh --wizard     # force the questions
+bash install.sh              # open browser setup on a desktop
+bash install.sh --browser-setup # force browser setup
+bash install.sh --wizard     # force the old terminal questions
 bash install.sh --yes        # no questions; sensible defaults
 bash install.sh --help       # every installer option
 ```
@@ -279,9 +285,11 @@ The front end has four pages:
   button.
 
 The sidebar includes Milelik's original black-and-white angular glitch
-companion sprite and speech plate. It idles, blinks, thinks, talks, glitches
-on errors, alerts during approval prompts, and sleeps when the model backend
-is unavailable. Reduced-motion browser preferences disable its animation.
+companion sprite and speech plate. The sprite and browser icon are **SVG
+only**—the front end and browser setup page do not use PNG/JPG/GIF/WebP sprite
+images. It idles, blinks, thinks, talks, glitches on errors, alerts during
+approval prompts, and sleeps when the model backend is unavailable.
+Reduced-motion browser preferences disable its animation.
 
 The first launch creates `~/MilelikWorkspace` (or your chosen folder) with
 small Python/JavaScript examples. Workspace paths cannot escape that folder.
@@ -407,7 +415,7 @@ milelik -v "..."                 # show full tool output + which backend/model i
 milelik --max-steps 20 "..."    # allow longer, multi-step tasks
 ```
 
-Settings live in `~/.config/milelik/config.json`. The installer wizard creates
+Settings live in `~/.config/milelik/config.json`. Browser setup creates
 them, the front end's **Preferences** page edits them, and
 `milelik --init-config` can recreate defaults. They include `model`,
 `backend`, `host`, `models_dir`, `model_file`, `model_discovery`, `ctx`,
@@ -515,8 +523,9 @@ checks them, and `install.sh` copies the manifests, dependency installer,
 installed `milelik.py`. Repository model files are hard-linked/symlinked into
 the installed `models/` folder when needed instead of being copied again. Apt
 supplies the signed distribution binaries and transitive libraries for the
-user's Mint release, while the preference wizard plus Ollama/model bootstrap
-logic remain in `install.sh` and `setup-model.sh`. The maths evaluator parses
+user's Mint release, while the browser setup front end lives in
+`setup_milelik.py` and the installer/model bootstrap logic remains in
+`install.sh` and `setup-model.sh`. The maths evaluator parses
 a restricted Python AST rather than calling `eval`, and workspace subprocesses
 run without GitHub/model API tokens in their environment.
 
@@ -547,10 +556,11 @@ run without GitHub/model API tokens in their environment.
 
 ## Tests
 
-83 tests, no running model or internet required (fake Ollama, fake LM Studio/
+87 tests, no running model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
-LibreOffice binaries, the real front-end HTTP server on an ephemeral port,
-a scripted installer-wizard run, and a real temporary Git repo are used):
+LibreOffice binaries, the real front-end and browser-setup HTTP servers on
+ephemeral ports, a scripted terminal-wizard fallback run, and a real
+temporary Git repo are used):
 
 ```bash
 python3 -m unittest discover -s tests -v
