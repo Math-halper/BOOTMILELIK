@@ -1,0 +1,9 @@
+graft frontend
+graft dependencies
+graft docs
+include models/README.md models/.gitkeep
+include install.sh setup-model.sh setup_milelik.py uninstall.sh
+include milelik.desktop milelik-workspace.desktop
+include Modelfile.qwen2.5-coder-abliterated requirements.txt README.md LICENSE
+global-exclude *.pyc
+global-exclude __pycache__

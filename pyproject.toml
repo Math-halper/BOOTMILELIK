@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "milelik"
+dynamic = ["version"]
+description = "Fast local AI assistant for linux Mint"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Milelik contributors" }]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Math-halper/BOOTMILELIK"
+Repository = "https://github.com/Math-halper/BOOTMILELIK"
+
+[project.scripts]
+milelik = "milelik:main"
+milelik-web = "milelik_web:main"
+
+[tool.setuptools]
+py-modules = ["milelik", "milelik_web"]
+
+[tool.setuptools.dynamic]
+version = { attr = "milelik.__version__" }

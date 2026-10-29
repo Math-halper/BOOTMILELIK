@@ -505,6 +505,178 @@ class TestGGUFImport(unittest.TestCase):
             self.assertFalse(milelik.import_gguf_to_ollama(str(bad)))
 
 
+class TestLocalModelFiles(unittest.TestCase):
+    @staticmethod
+    def _write_gguf(path, payload=b"model"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"GGUF" + payload)
+        return path
+
+    def test_discovery_is_recursive_and_groups_split_gguf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_gguf(root / milelik.TARGET_GGUF_FILENAME)
+            self._write_gguf(root / "nested" / "Other-Model.gguf", b"other")
+            self._write_gguf(root / "Tiny-00001-of-00002.gguf", b"one")
+            self._write_gguf(root / "Tiny-00002-of-00002.gguf", b"two")
+            self._write_gguf(root / "Incomplete-00001-of-00002.gguf", b"one")
+            (root / "weights.safetensors").write_bytes(b"not-gguf")
+            (root / "renamed.bin").write_bytes(b"GGUFrenamed")
+            (root / "download.gguf.part").write_bytes(b"GGUFpartial")
+            (root / "README.md").write_text("not a model")
+            link = root / "nested" / "Other-Link.gguf"
+            try:
+                link.symlink_to(root / "nested" / "Other-Model.gguf")
+            except OSError:
+                pass
+
+            records = milelik.discover_model_files([root])
+            by_name = {record["name"]: record for record in records}
+            self.assertIn(milelik.TARGET_GGUF_FILENAME, by_name)
+            self.assertTrue(by_name[milelik.TARGET_GGUF_FILENAME]["is_target"])
+            self.assertEqual(
+                by_name[milelik.TARGET_GGUF_FILENAME]["ollama_name"],
+                milelik.LOCAL_IMPORTED_MODEL)
+            self.assertTrue(by_name["Other-Model.gguf"]["supported"])
+            self.assertEqual(by_name["Tiny-00001-of-00002.gguf"]["part_count"], 2)
+            self.assertTrue(by_name["Tiny-00001-of-00002.gguf"]["supported"])
+            self.assertFalse(by_name["Incomplete-00001-of-00002.gguf"]["supported"])
+            self.assertIn("incomplete", by_name["Incomplete-00001-of-00002.gguf"]["reason"])
+            self.assertFalse(by_name["weights.safetensors"]["supported"])
+            self.assertTrue(by_name["renamed.bin"]["supported"])
+            self.assertEqual(by_name["renamed.bin"]["format"], "GGUF (.bin)")
+            self.assertNotIn("download.gguf.part", by_name)
+            # The symlink points at the same physical file and is de-duplicated.
+            self.assertEqual(
+                sum(1 for r in records if r["stem"].startswith("Other-")), 1)
+
+    def test_gguf_metadata_is_read_without_loading_weights(self):
+        import struct
+
+        def gguf_string(value):
+            encoded = value.encode()
+            return struct.pack("<Q", len(encoded)) + encoded
+
+        payload = bytearray(b"GGUF")
+        payload += struct.pack("<IQQ", 3, 0, 2)
+        for key, value in (("general.architecture", "qwen2"),
+                           ("general.name", "Tiny Coder Test")):
+            payload += gguf_string(key)
+            payload += struct.pack("<I", 8) + gguf_string(value)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tiny.gguf"
+            path.write_bytes(payload)
+            header = milelik.read_gguf_metadata(path)
+            records = milelik.discover_model_files([tmp])
+        self.assertEqual(header["metadata"]["general.architecture"], "qwen2")
+        self.assertEqual(records[0]["display_name"], "Tiny Coder Test")
+        self.assertEqual(records[0]["architecture"], "qwen2")
+        self.assertTrue(records[0]["is_qwen25_coder"])
+
+    def test_choose_model_file_priorities_and_interactive_choice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_gguf(root / milelik.TARGET_GGUF_FILENAME)
+            self._write_gguf(root / "Another.gguf", b"another")
+            (root / "weights.bin").write_bytes(b"123")
+            records = milelik.discover_model_files([root])
+
+            configured = milelik.choose_model_file(
+                records, configured_model=milelik.TARGET_MODEL_LABEL)
+            self.assertTrue(configured["is_target"])
+
+            picked = milelik.choose_model_file(
+                records, interactive=True,
+                input_fn=lambda _prompt: "2", print_fn=lambda *_: None)
+            self.assertEqual(picked["name"], "Another.gguf")
+
+            remembered_but_rechosen = milelik.choose_model_file(
+                records, selected_model_file=milelik.TARGET_GGUF_FILENAME,
+                interactive=True,
+                input_fn=lambda _prompt: "2", print_fn=lambda *_: None)
+            self.assertEqual(remembered_but_rechosen["name"], "Another.gguf")
+
+            use_server = milelik.choose_model_file(
+                records, interactive=True,
+                input_fn=lambda _prompt: "0", print_fn=lambda *_: None)
+            self.assertIsNone(use_server)
+            self.assertIsNone(milelik.choose_model_file(
+                records, selected_model_file="server-only-model",
+                strict_selected=True))
+            self.assertIsNone(milelik.choose_model_file(
+                records, selected_model_file="Missing.gguf",
+                strict_selected=True))
+            self.assertEqual(
+                milelik.find_model_file("weights.bin", records)["format"],
+                "Binary model weights")
+
+    def test_non_qwen_import_uses_generic_modelfile(self):
+        from unittest import mock
+        captured = {}
+
+        def fake_runner(cmd):
+            captured["cmd"] = cmd
+            captured["modelfile"] = Path(cmd[-1]).read_text()
+            class P:
+                returncode = 0
+            return P()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            gguf = Path(tmp) / "Some-Other-Model.gguf"
+            gguf.write_bytes(b"GGUF" + b"\x00" * 32)
+            name = milelik.ollama_name_for_model_file(gguf)
+            with mock.patch.object(milelik.shutil, "which",
+                                   return_value="/usr/bin/ollama"):
+                ok = milelik.import_gguf_to_ollama(
+                    str(gguf), ollama_name=name, runner=fake_runner)
+        self.assertTrue(ok)
+        self.assertTrue(name.startswith("milelik-some-other-model-"))
+        self.assertIn("FROM ./model.gguf", captured["modelfile"])
+        self.assertNotIn("<|im_start|>", captured["modelfile"])
+
+    def test_model_folder_cli_arguments_and_repository_folder(self):
+        from unittest import mock
+        self.assertTrue((ROOT / "models" / "README.md").is_file())
+        self.assertTrue((ROOT / "models" / ".gitkeep").is_file())
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+                os.environ, {"XDG_CONFIG_HOME": tmp}):
+            args = milelik.parse_args([
+                "--list-models", "--models-dir", "/tmp/all-models",
+                "--model-file", "Other.gguf"])
+            no_scan = milelik.parse_args(["--no-model-scan", "hello"])
+        self.assertTrue(args.list_models)
+        self.assertEqual(args.models_dir, "/tmp/all-models")
+        self.assertEqual(args.model_file, "Other.gguf")
+        self.assertTrue(args.explicit_model_file)
+        self.assertTrue(no_scan.no_model_scan)
+
+    def test_stale_saved_model_file_warns_and_continues(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_home = root / "config"
+            config_file = config_home / "milelik" / "config.json"
+            config_file.parent.mkdir(parents=True)
+            config_file.write_text(json.dumps({
+                "model_file": "Missing.gguf",
+                "model_discovery": True,
+            }))
+            models_dir = root / "models"
+            models_dir.mkdir()
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(config_home)}), \
+                    mock.patch.object(milelik, "select_client", return_value=mock.Mock()), \
+                    mock.patch.object(milelik, "run_check", return_value=0), \
+                    contextlib.redirect_stderr(stderr):
+                code = milelik.main(["--check", "--models-dir", str(models_dir)])
+        self.assertEqual(code, 0)
+        self.assertIn("Saved model file is no longer available", stderr.getvalue())
+
+
 class TestAppAndMediaTools(unittest.TestCase):
     def setUp(self):
         from unittest import mock
@@ -852,6 +1024,126 @@ class TestGitHubTools(unittest.TestCase):
             recorded = calls.read_text()
             self.assertIn("issue create --repo octo/demo", recorded)
             self.assertIn("--title Via gh", recorded)
+
+
+class TestBundledDependencies(unittest.TestCase):
+    @staticmethod
+    def _packages(name):
+        packages = []
+        for raw in (ROOT / "dependencies" / name).read_text().splitlines():
+            package = raw.split("#", 1)[0].strip()
+            if package:
+                packages.append(package)
+        return packages
+
+    def test_dependency_manifests_cover_all_tool_helpers(self):
+        required = set(self._packages("apt-required.txt"))
+        tools = set(self._packages("apt-tools.txt"))
+        optional = set(self._packages("apt-optional.txt"))
+
+        self.assertTrue({
+            "bash", "ca-certificates", "curl", "file", "iproute2",
+            "procps", "python3", "util-linux", "xdg-utils",
+        }.issubset(required))
+        self.assertTrue({
+            "brightnessctl", "ffmpeg", "gh", "git", "gnome-screenshot",
+            "libglib2.0-bin", "libgtk-3-bin", "libnotify-bin",
+            "libreoffice", "mediainfo", "nodejs", "npm", "playerctl",
+            "pulseaudio-utils", "python3-pip", "python3-venv",
+            "vlc", "wl-clipboard", "xclip", "xsel",
+        }.issubset(tools))
+        self.assertTrue({
+            "feh", "imagemagick", "maim", "scrot", "xfce4-screenshooter",
+        }.issubset(optional))
+
+    def test_python_dependency_manifests_declare_no_packages(self):
+        requirements = [
+            line.strip() for line in (ROOT / "requirements.txt").read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(requirements, [])
+        pyproject = (ROOT / "pyproject.toml").read_text()
+        self.assertIn('requires-python = ">=3.10"', pyproject)
+        self.assertIn("dependencies = []", pyproject)
+
+    def test_dependency_installer_list_is_complete_and_deduplicated(self):
+        script = ROOT / "dependencies" / "install-dependencies.sh"
+        self.assertTrue(os.access(script, os.X_OK))
+        result = subprocess.run(
+            [str(script), "--full", "--list"], cwd=ROOT,
+            text=True, capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packages = result.stdout.splitlines()
+        self.assertEqual(len(packages), len(set(packages)))
+        for package in ("python3", "vlc", "playerctl", "gh", "git", "ffmpeg"):
+            self.assertIn(package, packages)
+        self.assertTrue(milelik.DEPENDENCY_INSTALLER.exists())
+        self.assertIn("install-dependencies.sh", milelik.dependency_install_command())
+
+    def test_dependency_installer_with_fake_apt_and_check_mode(self):
+        script = ROOT / "dependencies" / "install-dependencies.sh"
+        commands = [
+            "python3", "curl", "file", "find", "ip", "ss", "xdg-open",
+            "pgrep", "pkill", "free", "df", "lscpu", "vlc", "playerctl",
+            "gh", "git", "ffprobe", "mediainfo", "libreoffice", "notify-send",
+            "xclip", "xsel", "wl-copy", "wl-paste", "brightnessctl", "pactl",
+            "gnome-screenshot", "gsettings", "gtk-launch",
+            "node", "npm", "pip3",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            bindir = Path(tmp)
+            apt_log = bindir / "apt.log"
+            (bindir / "apt-get").write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$*\" >> \"$FAKE_APT_LOG\"\n")
+            (bindir / "sudo").write_text("#!/usr/bin/env bash\nexec \"$@\"\n")
+            (bindir / "dpkg-query").write_text(
+                "#!/usr/bin/env bash\necho 'install ok installed'\n")
+            for command in commands:
+                (bindir / command).write_text("#!/bin/sh\nexit 0\n")
+            for path in bindir.iterdir():
+                path.chmod(0o755)
+            env = dict(os.environ)
+            env.update({
+                "PATH": str(bindir) + ":" + env.get("PATH", ""),
+                "FAKE_APT_LOG": str(apt_log),
+            })
+
+            install = subprocess.run(
+                [str(script), "--full", "--no-update"], cwd=ROOT, env=env,
+                text=True, capture_output=True, timeout=20)
+            self.assertEqual(install.returncode, 0, install.stderr)
+            self.assertIn("dependencies are ready", install.stdout)
+            calls = apt_log.read_text()
+            self.assertIn("install -y", calls)
+            self.assertIn(" vlc ", " " + calls + " ")
+            self.assertIn(" gh ", " " + calls + " ")
+            self.assertIn(" libreoffice ", " " + calls + " ")
+
+            check = subprocess.run(
+                [str(script), "--full", "--check"], cwd=ROOT, env=env,
+                text=True, capture_output=True, timeout=20)
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertIn("All expected dependency commands", check.stdout)
+
+    def test_main_installer_uses_and_copies_bundled_dependencies(self):
+        installer = (ROOT / "install.sh").read_text()
+        self.assertIn("dependencies/install-dependencies.sh\" --full", installer)
+        self.assertIn("DEPENDENCY_MODE", installer)
+        self.assertIn('cp -a "$SCRIPT_DIR/dependencies" "$APP_DIR/dependencies"', installer)
+        self.assertIn('requirements.txt pyproject.toml', installer)
+        self.assertIn('run_setup_wizard', installer)
+        self.assertIn('Step 5 of 7 — browser front end and workspace', installer)
+        self.assertIn('cp -a "$SCRIPT_DIR/frontend" "$APP_DIR/frontend"', installer)
+        self.assertIn('milelik_web.py', installer)
+        self.assertIn('milelik-web', installer)
+        self.assertIn('setup_milelik.py', installer)
+        self.assertIn('milelik-setup', installer)
+        self.assertIn('LAUNCH_WAS_SET', installer)
+        self.assertIn('bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full', installer)
+        self.assertIn('bash "$SCRIPT_DIR/setup-model.sh"', installer)
+        self.assertIn('python3 "$APP_DIR/milelik.py" --check', installer)
+        self.assertIn('MILELIK_ALLOW_ROOT', installer)
 
 
 if __name__ == "__main__":

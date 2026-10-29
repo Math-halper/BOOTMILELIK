@@ -4,8 +4,9 @@
 #   ./setup-model.sh [/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf]
 #   ./setup-model.sh --download     # no GGUF handy? pull it into Ollama instead
 #
-# With a GGUF (given, or found in the usual places - this folder, ~/Downloads,
-# ~/models, LM Studio's model folders) it imports the file into Ollama with
+# With a GGUF (given, or found in Milelik's models/ folders and the usual
+# places - this folder, ~/Downloads, ~/models, LM Studio's model folders)
+# it imports the file into Ollama with
 # the correct Qwen2.5-Coder ChatML/tools template as "milelik-coder:7b" and
 # makes it Milelik's default model.
 #
@@ -21,22 +22,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MILELIK_PY="$SCRIPT_DIR/milelik.py"
 DOWNLOAD=0
 GGUF="${GGUF:-}"
+MODELS_DIR="${MODELS_DIR:-${MILELIK_MODELS_DIR:-}}"
+INSTALLED_MODELS_DIR="$HOME/.local/share/milelik/models"
 
 for arg in "$@"; do
     case "$arg" in
         --download) DOWNLOAD=1 ;;
-        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
         *) GGUF="$arg" ;;
     esac
 done
 
 find_gguf() {
     local dir found
-    for dir in "$SCRIPT_DIR" "$PWD" "$HOME/Downloads" "$HOME/models" \
-               "$HOME/Models" "$HOME/.lmstudio/models" \
+    for dir in "$MODELS_DIR" "$SCRIPT_DIR/models" "$INSTALLED_MODELS_DIR" \
+               "$PWD/models" "$SCRIPT_DIR" "$PWD" "$HOME/Downloads" \
+               "$HOME/models" "$HOME/Models" "$HOME/.lmstudio/models" \
                "$HOME/.cache/lm-studio/models"; do
         [ -d "$dir" ] || continue
-        found="$(find "$dir" -maxdepth 6 -type f \
+        found="$(find "$dir" -maxdepth 6 \( -type f -o -type l \) \
                     -iname '*qwen2.5-coder*7b*abliterat*q4_k_m*.gguf' \
                     -print -quit 2>/dev/null || true)"
         if [ -n "$found" ]; then
@@ -48,7 +52,7 @@ find_gguf() {
 }
 
 if [ -n "$GGUF" ] && [ -d "$GGUF" ]; then
-    FOUND="$(find "$GGUF" -maxdepth 4 -type f \
+    FOUND="$(find "$GGUF" -maxdepth 4 \( -type f -o -type l \) \
                 -iname '*qwen2.5-coder*7b*abliterat*q4_k_m*.gguf' \
                 -print -quit 2>/dev/null || true)"
     [ -n "$FOUND" ] && GGUF="$FOUND"
@@ -100,7 +104,7 @@ PY
 fi
 
 echo "Could not find $TARGET_FILE"
-echo "in this folder, ~/Downloads, ~/models, or LM Studio's model folders."
+echo "in Milelik's models/ folders, this folder, ~/Downloads, ~/models, or LM Studio's model folders."
 echo
 echo "Options:"
 echo "  1. Point at your file:   ./setup-model.sh /path/to/$TARGET_FILE"

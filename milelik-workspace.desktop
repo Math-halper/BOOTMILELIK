@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Milelik Workspace
+Comment=Milelik browser front end: local AI chat, code workspace/runner and local APIs
+Exec=milelik --gui
+Terminal=false
+Icon=web-browser
+Categories=Development;Utility;System;
