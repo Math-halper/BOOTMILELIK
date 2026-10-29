@@ -1140,6 +1140,10 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn('setup_milelik.py', installer)
         self.assertIn('milelik-setup', installer)
         self.assertIn('LAUNCH_WAS_SET', installer)
+        self.assertIn('bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full', installer)
+        self.assertIn('bash "$SCRIPT_DIR/setup-model.sh"', installer)
+        self.assertIn('python3 "$APP_DIR/milelik.py" --check', installer)
+        self.assertIn('MILELIK_ALLOW_ROOT', installer)
 
 
 if __name__ == "__main__":

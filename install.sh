@@ -483,6 +483,17 @@ run_setup_wizard() {
     fi
 }
 
+if [ "${EUID:-1}" -eq 0 ] && [ "${MILELIK_ALLOW_ROOT:-0}" != "1" ]; then
+    echo "Error: do not run the Milelik installer as root/sudo." >&2
+    echo "Run it as your normal desktop user:" >&2
+    echo "  python3 setup_milelik.py" >&2
+    echo "The installer requests sudo only for system packages/services. Running" >&2
+    echo "the whole installer as root would install Milelik under /root instead" >&2
+    echo "of your own account. Set MILELIK_ALLOW_ROOT=1 only for a root-only test" >&2
+    echo "environment." >&2
+    exit 2
+fi
+
 INTERACTIVE=0
 if [ "$FORCE_WIZARD" = "1" ] || { [ "$ASSUME_YES" = "0" ] && [ -t 0 ] && [ -t 1 ]; }; then
     INTERACTIVE=1
@@ -523,13 +534,13 @@ WORKSPACE_DIR="$(expand_path "$WORKSPACE_DIR")"
 # --- 1. System dependencies declared in this repository ----------------------
 case "$DEPENDENCY_MODE" in
     full)
-        "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full
+        bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full
         ;;
     required|minimal)
-        "$SCRIPT_DIR/dependencies/install-dependencies.sh" --required
+        bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --required
         ;;
     with-optional|optional)
-        "$SCRIPT_DIR/dependencies/install-dependencies.sh" --with-optional
+        bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --with-optional
         ;;
     none|skip)
         echo "Skipping bundled dependency installation (DEPENDENCY_MODE=$DEPENDENCY_MODE)."
@@ -545,13 +556,13 @@ if ! command -v python3 >/dev/null 2>&1 || \
    ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
     echo "Milelik needs Python 3.10 or newer." >&2
     echo "Install the repository's dependencies with:" >&2
-    echo "  $SCRIPT_DIR/dependencies/install-dependencies.sh --required" >&2
+    echo "  bash $SCRIPT_DIR/dependencies/install-dependencies.sh --required" >&2
     exit 1
 fi
 if ! command -v curl >/dev/null 2>&1; then
     echo "Milelik's installer needs curl." >&2
     echo "Install the repository's dependencies with:" >&2
-    echo "  $SCRIPT_DIR/dependencies/install-dependencies.sh --required" >&2
+    echo "  bash $SCRIPT_DIR/dependencies/install-dependencies.sh --required" >&2
     exit 1
 fi
 
@@ -609,7 +620,7 @@ PY
         [ -z "$MODEL_FILE" ] && MODEL_FILE="$GGUF_CANDIDATE"
         echo "Found your GGUF: $GGUF_CANDIDATE"
         echo "Importing it (no download)…"
-        "$SCRIPT_DIR/setup-model.sh" "$GGUF_CANDIDATE"
+        bash "$SCRIPT_DIR/setup-model.sh" "$GGUF_CANDIDATE"
         MODEL="milelik-coder:7b"
         BACKEND="ollama"
     elif [ "$MODEL_SOURCE" = "gguf" ]; then
@@ -801,7 +812,7 @@ echo
 if [ "$SKIP_CHECK" = "1" ]; then
     echo "Skipping final check (--skip-check)."
 else
-    "$BIN_DIR/milelik" --check || true
+    python3 "$APP_DIR/milelik.py" --check || true
 fi
 
 if [ "$GITHUB_LOGIN" = "1" ]; then
@@ -820,11 +831,11 @@ case "$LAUNCH_AFTER_INSTALL" in
             echo
             echo "Opening the Milelik front end in the background…"
             if [ "$OPEN_BROWSER" = "1" ]; then
-                nohup "$BIN_DIR/milelik" --gui --workspace-dir "$WORKSPACE_DIR" \
+                nohup python3 "$APP_DIR/milelik.py" --gui --workspace-dir "$WORKSPACE_DIR" \
                     --web-host "$WEB_HOST" --web-port "$WEB_PORT" --open-browser \
                     >"$APP_DIR/frontend.log" 2>&1 &
             else
-                nohup "$BIN_DIR/milelik" --gui --workspace-dir "$WORKSPACE_DIR" \
+                nohup python3 "$APP_DIR/milelik.py" --gui --workspace-dir "$WORKSPACE_DIR" \
                     --web-host "$WEB_HOST" --web-port "$WEB_PORT" --no-open-browser \
                     >"$APP_DIR/frontend.log" 2>&1 &
             fi

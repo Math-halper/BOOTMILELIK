@@ -124,6 +124,31 @@ def resolve_installed_command(home=None, which=shutil.which) -> Path | None:
     return Path(found) if found else None
 
 
+def installed_app_path(home=None) -> Path:
+    """Return the per-user installed copy of milelik.py."""
+    home = Path(home) if home is not None else Path.home()
+    return home / ".local" / "share" / "milelik" / "milelik.py"
+
+
+def installed_launch_prefix(installed_command=None, home=None,
+                            python_executable=None):
+    """Return a launch prefix that does not depend on a wrapper's +x bit.
+
+    The normal `~/.local/bin/milelik` wrapper is useful in a terminal, but it
+    cannot run if an extractor dropped its executable bit or if the home
+    filesystem is mounted `noexec`. In those cases, running the installed
+    Python file with the current interpreter is equivalent and reliable.
+    """
+    app_file = installed_app_path(home)
+    if app_file.is_file():
+        return [python_executable or sys.executable, str(app_file)]
+    if not installed_command:
+        return []
+    if isinstance(installed_command, (list, tuple)):
+        return [str(part) for part in installed_command]
+    return [str(installed_command)]
+
+
 def run_command(command, *, dry_run=False, runner=subprocess.run, cwd=None,
                 env=None) -> int:
     """Run one command, or print it in dry-run mode."""
@@ -137,6 +162,13 @@ def run_command(command, *, dry_run=False, runner=subprocess.run, cwd=None,
         result = runner([str(part) for part in command], cwd=cwd, env=env)
     except KeyboardInterrupt:
         return 130
+    except PermissionError as error:
+        print(f"Error: could not run {command[0]}: {error}", file=sys.stderr)
+        print("Permission denied here usually means a missing executable bit "
+              "or a filesystem mounted with noexec. sudo does not bypass "
+              "noexec; run scripts through python3/bash or move Milelik "
+              "into your home folder.", file=sys.stderr)
+        return 126
     except OSError as error:
         print(f"Error: could not run {command[0]}: {error}", file=sys.stderr)
         return 1
@@ -205,7 +237,10 @@ def build_launch_command(args, root: Path = ROOT, installed_command=None,
         return []
 
     if not args.source and installed_command:
-        command = [str(installed_command)]
+        if isinstance(installed_command, (list, tuple)):
+            command = [str(part) for part in installed_command]
+        else:
+            command = [str(installed_command)]
     else:
         command = [python_executable or sys.executable, str(root / "milelik.py")]
 
@@ -264,6 +299,8 @@ def parse_args(argv=None):
     )
     parser.add_argument("--yes", "-y", action="store_true",
                         help="use installer defaults instead of the guided questions")
+    parser.add_argument("--allow-root", action="store_true",
+                        help="allow running as root (not recommended for a desktop install)")
     parser.add_argument("--install", action="store_true",
                         help="run the installer even with --check or --list-models")
     parser.add_argument("--install-only", action="store_true",
@@ -344,9 +381,27 @@ def parse_args(argv=None):
     return args
 
 
+def current_euid():
+    return os.geteuid() if hasattr(os, "geteuid") else None
+
+
 def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
-         stdout_isatty=None, root: Path = ROOT, installed_command="auto") -> int:
+         stdout_isatty=None, root: Path = ROOT, installed_command="auto",
+         euid=None) -> int:
     args = parse_args(argv)
+
+    effective_euid = current_euid() if euid is None else euid
+    if effective_euid == 0 and not args.allow_root and not args.dry_run:
+        print("Error: do not run setup_milelik.py as root/sudo.", file=sys.stderr)
+        print("Run it as your normal desktop user:", file=sys.stderr)
+        print("  python3 setup_milelik.py", file=sys.stderr)
+        print("If ./setup_milelik.py says Permission denied, the python3 form "
+              "above bypasses the script's executable bit. sudo does not "
+              "bypass a noexec mount, and the installer already requests "
+              "sudo only for system packages/services.", file=sys.stderr)
+        print("Use --allow-root only in a root-only test environment.",
+              file=sys.stderr)
+        return 2
 
     if sys.version_info < MIN_PYTHON:
         print(
@@ -394,8 +449,10 @@ def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
 
     if installed_command == "auto":
         installed = resolve_installed_command()
+        installed_prefix = installed_launch_prefix(installed)
     else:
         installed = Path(installed_command) if installed_command else None
+        installed_prefix = [str(installed)] if installed else []
 
     if should_install and interactive_terminal and not args.yes:
         print()
@@ -417,6 +474,8 @@ def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
                                                     interactive_terminal=interactive_terminal)
             install_env = os.environ.copy()
             install_env["MILELIK_WIZARD_CANCEL_EXIT"] = str(INSTALLER_CANCELLED)
+            if args.allow_root:
+                install_env["MILELIK_ALLOW_ROOT"] = "1"
             code = run_command(install_command, dry_run=args.dry_run, runner=runner,
                                cwd=os.getcwd(), env=install_env)
             if code == INSTALLER_CANCELLED:
@@ -426,7 +485,8 @@ def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
                 return code
             if installed_command == "auto":
                 installed = resolve_installed_command()
-        elif installed:
+                installed_prefix = installed_launch_prefix(installed)
+        elif installed_prefix:
             print("Milelik appears to already be installed; skipping the repository installer.")
         else:
             print(f"Error: bundled installer not found: {installer}", file=sys.stderr)
@@ -444,7 +504,7 @@ def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
             print("The front end is disabled in Milelik preferences; starting terminal chat instead.")
             args.launch = "cli"
 
-    launch_command = build_launch_command(args, root=root, installed_command=installed)
+    launch_command = build_launch_command(args, root=root, installed_command=installed_prefix)
     if not launch_command:
         print()
         print("Setup finished. Start Milelik with one of:")

@@ -52,6 +52,10 @@ class TestSetupMilelikScript(unittest.TestCase):
         self.assertEqual(command[0], str(installed))
         self.assertEqual(command[-1], "check my disk")
 
+        prefix = ["/usr/bin/python3", "/tmp/fake-home/.local/share/milelik/milelik.py"]
+        command = setup.build_launch_command(task, root=ROOT, installed_command=prefix)
+        self.assertEqual(command[:2], prefix)
+
     def test_ensure_models_folder_and_installed_command_resolution(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo"
@@ -66,6 +70,17 @@ class TestSetupMilelikScript(unittest.TestCase):
             installed.write_text("#!/bin/sh\nexit 0\n")
             installed.chmod(0o755)
             self.assertEqual(setup.resolve_installed_command(Path(tmp)), installed)
+
+            app = Path(tmp) / ".local" / "share" / "milelik" / "milelik.py"
+            app.parent.mkdir(parents=True)
+            app.write_text("# installed app\n")
+            app.chmod(0o644)
+            installed.chmod(0o644)
+            self.assertEqual(
+                setup.installed_launch_prefix(installed, home=Path(tmp),
+                                               python_executable="/usr/bin/python3"),
+                ["/usr/bin/python3", str(app)],
+            )
 
     def test_dry_run_list_models_does_not_call_runner(self):
         def runner(*_args, **_kwargs):
@@ -121,11 +136,42 @@ class TestSetupMilelikScript(unittest.TestCase):
                 stdin_isatty=False,
                 stdout_isatty=False,
                 installed_command=None,
+                euid=1000,
             )
         self.assertEqual(code, 0)
         self.assertEqual(len(calls), 1)
         self.assertIn("install.sh", " ".join(calls[0][0]))
         self.assertIn("Setup cancelled", output.getvalue())
+
+    def test_root_is_rejected_with_python3_without_sudo_instructions(self):
+        def runner(*_args, **_kwargs):
+            raise AssertionError("runner should not be called for a root run")
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = setup.main(
+                ["--run-only", "--cli"],
+                runner=runner,
+                stdin_isatty=False,
+                stdout_isatty=False,
+                installed_command=None,
+                euid=0,
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("do not run setup_milelik.py as root/sudo", stderr.getvalue())
+        self.assertIn("python3 setup_milelik.py", stderr.getvalue())
+        self.assertTrue(setup.parse_args(["--allow-root", "--dry-run"]).allow_root)
+
+    def test_permission_error_explains_noexec_and_returns_126(self):
+        def runner(*_args, **_kwargs):
+            raise PermissionError(13, "Permission denied")
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = setup.run_command(["/tmp/milelik"], runner=runner)
+        self.assertEqual(code, 126)
+        self.assertIn("noexec", stderr.getvalue())
+        self.assertIn("sudo does not bypass", stderr.getvalue())
 
 
 if __name__ == "__main__":

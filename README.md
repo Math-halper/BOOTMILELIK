@@ -129,7 +129,17 @@ python3 setup_milelik.py
 That Python setup script is the easiest way to start. It checks Python and
 the `models/` folder, shows which model file Milelik will choose, runs the
 bundled guided installer, and then starts the browser front end in the same
-terminal. Useful forms include:
+terminal.
+
+> **Do not run the setup script with `sudo`.** Run
+> `python3 setup_milelik.py` as your normal user; the installer asks for sudo
+> only when it needs system packages or services. If
+> `./setup_milelik.py` says \"Permission denied\", the `python3` form above
+> bypasses the file's executable bit. `sudo` cannot bypass a drive mounted
+> with `noexec`, so keep the clone in your home folder rather than on some
+> USB/Windows drives if that happens.
+
+Useful forms include:
 
 ```bash
 python3 setup_milelik.py                 # guided setup, then open the front end
@@ -142,7 +152,7 @@ python3 setup_milelik.py --check
 python3 setup_milelik.py --dry-run       # show the commands without running them
 ```
 
-You can also run `./install.sh` directly. In a terminal it opens Milelik's
+You can also run `bash install.sh` directly. In a terminal it opens Milelik's
 **7-step setup wizard**. Press Enter to accept a highlighted default, or
 choose:
 
@@ -164,10 +174,10 @@ existing local server, and adds both **Milelik** and **Milelik Workspace** to
 your app menu.
 
 ```bash
-./install.sh                 # friendly preference wizard in a terminal
-./install.sh --wizard        # force the questions
-./install.sh --yes           # no questions; sensible defaults
-./install.sh --help          # every installer option
+bash install.sh              # friendly preference wizard in a terminal
+bash install.sh --wizard     # force the questions
+bash install.sh --yes        # no questions; sensible defaults
+bash install.sh --help       # every installer option
 ```
 
 The system packages live in this repository in
@@ -479,6 +489,7 @@ run without GitHub/model API tokens in their environment.
 
 | Problem | Fix |
 |---|---|
+| `Permission denied` when starting setup, including with `sudo` | Do not run the whole setup as root. From the repository folder run `python3 setup_milelik.py` (not `./setup_milelik.py` and not `sudo`). The `python3` form does not need the script's executable bit. If it still fails, run `findmnt -T . -o TARGET,OPTIONS`; if the options contain `noexec`, move/clone Milelik into your home folder (for example `~/BOOTMILELIK`) and run it there. `chmod +x setup_milelik.py` only fixes a missing executable bit; it cannot override `noexec`. |
 | "No local model server is reachable" | `milelik --check` probes Ollama (11434), LM Studio (1234) and llama.cpp (8080) and shows which is up and where the model was found. Start one: `ollama serve`, LM Studio's server, or `llama-server …`. |
 | Model not found in Ollama | `./setup-model.sh --download`, or `ollama pull huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M`. Passing `--model Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M` is fine — the name is translated. |
 | Model not found in LM Studio | Actually load the GGUF in LM Studio (not just download it) and start the server, then `milelik --check`. Or pass the exact id LM Studio shows via `--model`. |
@@ -501,7 +512,7 @@ run without GitHub/model API tokens in their environment.
 
 ## Tests
 
-77 tests, no model or internet required (fake Ollama, fake LM Studio/
+79 tests, no model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
 LibreOffice binaries, the real front-end HTTP server on an ephemeral port,
 a scripted installer-wizard run, and a real temporary Git repo are used):
