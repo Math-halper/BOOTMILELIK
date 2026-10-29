@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Milelik
+Comment=Fast local AI assistant (shell + web tools, runs on Ollama)
+Exec=milelik --interactive
+Terminal=true
+Icon=utilities-terminal
+Categories=Utility;System;
