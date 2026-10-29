@@ -123,11 +123,28 @@ reliably emits valid `<tool_call>` JSON.
 ```bash
 git clone https://github.com/Math-halper/BOOTMILELIK.git
 cd BOOTMILELIK
-./install.sh
+python3 setup_milelik.py
 ```
 
-In a terminal, that command opens Milelik's **7-step setup wizard**. Press
-Enter to accept a highlighted default, or choose:
+That Python setup script is the easiest way to start. It checks Python and
+the `models/` folder, shows which model file Milelik will choose, runs the
+bundled guided installer, and then starts the browser front end in the same
+terminal. Useful forms include:
+
+```bash
+python3 setup_milelik.py                 # guided setup, then open the front end
+python3 setup_milelik.py --yes           # default setup, then open the front end
+python3 setup_milelik.py --run-only      # skip installation; run from this folder
+python3 setup_milelik.py --run-only --cli
+python3 setup_milelik.py --install-only
+python3 setup_milelik.py --list-models
+python3 setup_milelik.py --check
+python3 setup_milelik.py --dry-run       # show the commands without running them
+```
+
+You can also run `./install.sh` directly. In a terminal it opens Milelik's
+**7-step setup wizard**. Press Enter to accept a highlighted default, or
+choose:
 
 1. Dependency set (full/core/optional/none)
 2. Where the model comes from: automatic Ollama download, your existing GGUF,
@@ -162,7 +179,8 @@ desktop, LibreOffice, Git/GitHub, Node/npm and Python project tools) and
 [`dependencies/install-dependencies.sh`](dependencies/install-dependencies.sh)
 for you. See [`dependencies/README.md`](dependencies/README.md) for the map.
 
-Then open a **new terminal** and try the front end or CLI:
+If you installed without launching Milelik, open a **new terminal** and try
+the front end or CLI:
 
 ```bash
 milelik --gui          # browser chat + workspace/code runner + local APIs
@@ -174,6 +192,8 @@ milelik --interactive
 download, and no second copy of the weights outside Ollama's store:
 
 ```bash
+python3 setup_milelik.py --gguf /path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
+# or:
 GGUF=/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf ./install.sh
 ```
 
@@ -481,7 +501,7 @@ run without GitHub/model API tokens in their environment.
 
 ## Tests
 
-70 tests, no model or internet required (fake Ollama, fake LM Studio/
+77 tests, no model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
 LibreOffice binaries, the real front-end HTTP server on an ephemeral port,
 a scripted installer-wizard run, and a real temporary Git repo are used):

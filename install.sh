@@ -49,6 +49,7 @@ WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/MilelikWorkspace}"
 UI_THEME="${UI_THEME:-system}"
 UI_DEFAULT_VIEW="${UI_DEFAULT_VIEW:-chat}"
 GITHUB_LOGIN="${GITHUB_LOGIN:-0}"
+LAUNCH_WAS_SET=0; [ -n "${LAUNCH_AFTER_INSTALL:-}" ] && LAUNCH_WAS_SET=1
 LAUNCH_AFTER_INSTALL="${LAUNCH_AFTER_INSTALL:-none}"
 
 ASSUME_YES=0
@@ -144,7 +145,7 @@ while [ "$#" -gt 0 ]; do
         --web-port) need_value "$@"; WEB_PORT="$2"; shift ;;
         --frontend) FRONTEND_ENABLED=1 ;;
         --no-frontend) FRONTEND_ENABLED=0 ;;
-        --launch) need_value "$@"; LAUNCH_AFTER_INSTALL="$2"; shift ;;
+        --launch) need_value "$@"; LAUNCH_AFTER_INSTALL="$2"; LAUNCH_WAS_SET=1; shift ;;
         --github-login) GITHUB_LOGIN=1 ;;
         --no-github-login) GITHUB_LOGIN=0 ;;
         --auto-approve) AUTO_APPROVE=1 ;;
@@ -456,7 +457,9 @@ run_setup_wizard() {
 
     echo
     echo "Step 7 of 7 — what to open when installation finishes"
-    if [ "$FRONTEND_ENABLED" = "1" ]; then
+    if [ "$LAUNCH_WAS_SET" = "1" ]; then
+        echo "Launch after install: $LAUNCH_AFTER_INSTALL (set by command line or environment)"
+    elif [ "$FRONTEND_ENABLED" = "1" ]; then
         local default_launch="$LAUNCH_AFTER_INSTALL"
         [ "$default_launch" = "none" ] && default_launch="frontend"
         ask_choice LAUNCH_AFTER_INSTALL "After installing:" "$default_launch" \
@@ -474,7 +477,9 @@ run_setup_wizard() {
     ask_yes_no proceed "Proceed with these choices?" 1
     if [ "$proceed" != "1" ]; then
         echo "Installation cancelled. Nothing was installed."
-        exit 0
+        # setup_milelik.py sets this so it knows not to launch Milelik after
+        # a cancelled wizard. Direct ./install.sh runs keep exit code 0.
+        exit "${MILELIK_WIZARD_CANCEL_EXIT:-0}"
     fi
 }
 
@@ -632,7 +637,7 @@ if [ "$FRONTEND_ENABLED" = "1" ]; then
 else
     rm -f "$APP_DIR/milelik_web.py"
 fi
-for extra in setup-model.sh Modelfile.qwen2.5-coder-abliterated; do
+for extra in setup-model.sh setup_milelik.py Modelfile.qwen2.5-coder-abliterated; do
     if [ -f "$SCRIPT_DIR/$extra" ]; then
         install -m 0755 "$SCRIPT_DIR/$extra" "$APP_DIR/$extra"
     fi
@@ -692,6 +697,15 @@ EOF
     chmod +x "$BIN_DIR/milelik-web"
 else
     rm -f "$BIN_DIR/milelik-web"
+fi
+if [ -f "$APP_DIR/setup_milelik.py" ]; then
+    cat > "$BIN_DIR/milelik-setup" <<EOF
+#!/usr/bin/env bash
+exec python3 "$APP_DIR/setup_milelik.py" "\$@"
+EOF
+    chmod +x "$BIN_DIR/milelik-setup"
+else
+    rm -f "$BIN_DIR/milelik-setup"
 fi
 
 if [ -f "$SCRIPT_DIR/milelik.desktop" ]; then

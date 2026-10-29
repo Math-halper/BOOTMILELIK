@@ -651,6 +651,31 @@ class TestLocalModelFiles(unittest.TestCase):
         self.assertTrue(args.explicit_model_file)
         self.assertTrue(no_scan.no_model_scan)
 
+    def test_stale_saved_model_file_warns_and_continues(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_home = root / "config"
+            config_file = config_home / "milelik" / "config.json"
+            config_file.parent.mkdir(parents=True)
+            config_file.write_text(json.dumps({
+                "model_file": "Missing.gguf",
+                "model_discovery": True,
+            }))
+            models_dir = root / "models"
+            models_dir.mkdir()
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(config_home)}), \
+                    mock.patch.object(milelik, "select_client", return_value=mock.Mock()), \
+                    mock.patch.object(milelik, "run_check", return_value=0), \
+                    contextlib.redirect_stderr(stderr):
+                code = milelik.main(["--check", "--models-dir", str(models_dir)])
+        self.assertEqual(code, 0)
+        self.assertIn("Saved model file is no longer available", stderr.getvalue())
+
 
 class TestAppAndMediaTools(unittest.TestCase):
     def setUp(self):
@@ -1112,6 +1137,9 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn('cp -a "$SCRIPT_DIR/frontend" "$APP_DIR/frontend"', installer)
         self.assertIn('milelik_web.py', installer)
         self.assertIn('milelik-web', installer)
+        self.assertIn('setup_milelik.py', installer)
+        self.assertIn('milelik-setup', installer)
+        self.assertIn('LAUNCH_WAS_SET', installer)
 
 
 if __name__ == "__main__":

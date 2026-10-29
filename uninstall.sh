@@ -4,7 +4,7 @@
 set -euo pipefail
 
 APP_DIR="$HOME/.local/share/milelik"
-rm -f  "$HOME/.local/bin/milelik" "$HOME/.local/bin/milelik-web"
+rm -f  "$HOME/.local/bin/milelik" "$HOME/.local/bin/milelik-web" "$HOME/.local/bin/milelik-setup"
 if [ -d "$APP_DIR/models" ]; then
     # AI model files can be many gigabytes, so preserve models/ and remove
     # only Milelik's program files around it.

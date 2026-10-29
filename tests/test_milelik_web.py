@@ -479,7 +479,9 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             self.assertEqual(config["model_file"], "")
             self.assertTrue((home / ".local" / "share" / "milelik" / "models" / "README.md").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "app.js").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "setup_milelik.py").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-web").is_file())
+            self.assertTrue((home / ".local" / "bin" / "milelik-setup").is_file())
             self.assertTrue((home / ".local" / "share" / "applications" / "milelik-workspace.desktop").is_file())
             self.assertIn(" nodejs ", " " + apt_log.read_text() + " ")
 

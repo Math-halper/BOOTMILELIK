@@ -46,7 +46,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 # The model Milelik is tuned for out of the box. Note the Ollama library
 # spells the repo "abliterate", while the Hugging Face GGUF file uses
@@ -5045,7 +5045,7 @@ def main(argv=None) -> int:
                 print("Run `milelik --list-models` to see the model files Milelik can see.")
                 return 1
             if not args.explicit_model:
-                jar(f"Saved model file is no longer available; ignoring it: {selector}")
+                warn(f"Saved model file is no longer available; ignoring it: {selector}")
         if selected_local_model and not selected_local_model.get("supported"):
             err(f"Selected model file is not runnable: {selected_local_model['path']}")
             if selected_local_model.get("reason"):
