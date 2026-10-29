@@ -5,7 +5,9 @@ Run:  python3 -m unittest discover -s tests -v
 import importlib.util
 import http.server
 import json
+import os
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -501,6 +503,355 @@ class TestGGUFImport(unittest.TestCase):
             bad = Path(tmp) / "not-a-model.gguf"
             bad.write_bytes(b"NOPE")
             self.assertFalse(milelik.import_gguf_to_ollama(str(bad)))
+
+
+class TestAppAndMediaTools(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        self.mock = mock
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.apps = self.root / "apps"
+        self.bin = self.root / "bin"
+        self.apps.mkdir()
+        self.bin.mkdir()
+        (self.apps / "vlc.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nName=VLC media player\n"
+            "Comment=Play movies and music\nCategories=AudioVideo;Player;\n"
+            "Exec=vlc %U\n")
+        (self.apps / "firefox.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nName=Firefox Web Browser\n"
+            "Comment=Browse the web\nCategories=Network;WebBrowser;\n"
+            "Exec=firefox %u\n")
+
+        def script(name, body):
+            p = self.bin / name
+            p.write_text("#!/usr/bin/env bash\n" + body)
+            p.chmod(0o755)
+
+        for empty in ("vlc", "gtk-launch", "xdg-open", "gnome-terminal",
+                      "firefox"):
+            script(empty, "exit 0\n")
+        script("playerctl", """args="$*"
+case "$args" in
+  *status*) echo Playing;;
+  *"metadata title"*) echo 'Demo Song';;
+  *"metadata artist"*) echo 'Demo Artist';;
+  *"metadata album"*) echo 'Demo Album';;
+  *"xesam:url"*) echo 'file:///tmp/demo.mp3';;
+  *"mpris:length"*) echo 180000000;;
+  *"--list-all"*) echo vlc;;
+  *"volume 0."*) exit 0;;
+  *volume*) echo 0.50;;
+  *"position "*) exit 0;;
+  *position*) echo 42;;
+  *) exit 0;;
+esac
+""")
+        script("notify-send", 'echo "notified:$*"\n')
+        script("wpctl", """case "$1" in
+get-volume) echo 'Volume: 0.42';;
+set-volume) exit 0;;
+esac
+""")
+        clip = self.root / "clip.txt"
+        script("xclip", f"""if [ "$1" = "-o" ]; then echo clipboard-demo; else cat > {clip}; fi
+""")
+        script("gnome-screenshot",
+               'for a in "$@"; do last="$a"; done; printf png > "$last"\n')
+        script("libreoffice", """out=""; fmt=""; src=""; prev=""
+for a in "$@"; do
+  if [ "$prev" = "--outdir" ]; then out="$a"; fi
+  if [ "$prev" = "--convert-to" ]; then fmt="$a"; fi
+  prev="$a"; src="$a"
+done
+base=$(basename "$src"); stem=${base%.*}; printf converted > "$out/$stem.$fmt"
+echo converted
+""")
+        self.path_patch = mock.patch.dict(
+            os.environ, {"PATH": str(self.bin) + ":" + os.environ.get("PATH", "")})
+        self.path_patch.start()
+        self.addCleanup(self.path_patch.stop)
+        self.tb = milelik.Toolbox(auto=True, cwd=str(self.root),
+                                  app_dirs=[self.apps])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_list_and_find_apps(self):
+        out = self.tb.dispatch("list_apps", {"query": "vlc"})
+        self.assertIn("VLC media player", out)
+        self.assertIn("(id: vlc)", out)
+        out = self.tb.dispatch("list_apps", {"query": "browser"})
+        self.assertIn("Firefox", out)
+        # "video" should find VLC via its AudioVideo category
+        self.assertIn("VLC", self.tb.dispatch("list_apps", {"query": "video"}))
+
+    def test_open_app_target_terminal_and_vlc_launch_detached(self):
+        launches = []
+
+        class FakePopen:
+            pid = 4242
+
+            def __init__(self, args, **kwargs):
+                launches.append([str(a) for a in args])
+
+        movie = self.root / "movie.mp4"
+        movie.write_bytes(b"x")
+        with self.mock.patch.object(milelik.subprocess, "Popen", FakePopen):
+            self.assertIn("Launched", self.tb.dispatch("open_app", {"app": "VLC"}))
+            self.assertIn("Launched", self.tb.dispatch(
+                "vlc", {"action": "play", "source": str(movie), "fullscreen": True}))
+            self.assertIn("Launched", self.tb.dispatch(
+                "open_target", {"target": "https://github.com"}))
+            self.assertIn("Launched", self.tb.dispatch(
+                "open_terminal", {"path": str(self.root)}))
+        flat = [" ".join(args) for args in launches]
+        self.assertTrue(any("gtk-launch vlc" in x for x in flat))
+        self.assertTrue(any("--fullscreen" in x and "movie.mp4" in x for x in flat))
+        self.assertTrue(any("xdg-open https://github.com" in x for x in flat))
+        self.assertTrue(any("gnome-terminal" in x for x in flat))
+
+    def test_vlc_and_media_player_status_and_controls(self):
+        status = self.tb.dispatch("vlc", {"action": "status"})
+        self.assertIn("Demo Song", status)
+        self.assertIn("Volume: 50%", status)
+        nxt = self.tb.dispatch("media_player",
+                               {"action": "next", "player": "vlc"})
+        self.assertIn("next sent to vlc", nxt)
+        vol = self.tb.dispatch("vlc", {"action": "volume_set", "value": "25"})
+        self.assertIn("Volume set to 25%", vol)
+
+    def test_desktop_control_and_office_conversion(self):
+        self.assertIn("notified:Hello there", self.tb.dispatch(
+            "desktop_control", {"action": "notify", "title": "Hello",
+                                "value": "there"}))
+        self.assertIn("Volume: 42%", self.tb.dispatch(
+            "desktop_control", {"action": "volume_get"}))
+        self.assertIn("Volume set to 55%", self.tb.dispatch(
+            "desktop_control", {"action": "volume_set", "value": "55"}))
+        self.assertIn("clipboard-demo", self.tb.dispatch(
+            "desktop_control", {"action": "clipboard_get"}))
+        self.assertIn("Clipboard updated", self.tb.dispatch(
+            "desktop_control", {"action": "clipboard_set", "value": "new text"}))
+        self.assertEqual((self.root / "clip.txt").read_text(), "new text")
+        shot = self.root / "shot.png"
+        out = self.tb.dispatch("desktop_control",
+                               {"action": "screenshot", "path": str(shot)})
+        self.assertIn("Screenshot saved", out)
+        self.assertTrue(shot.exists())
+
+        doc = self.root / "note.odt"
+        doc.write_bytes(b"doc")
+        out = self.tb.dispatch("office_document",
+                               {"action": "convert", "path": str(doc),
+                                "format": "pdf"})
+        self.assertIn("Converted", out)
+        self.assertTrue((self.root / "note.pdf").exists())
+
+    def test_new_tool_names_aliases_and_prompt(self):
+        for name in ("vlc", "media_player", "open_app", "desktop_control",
+                     "git_repo", "github_search", "github_repo",
+                     "github_issues", "github_pull_requests",
+                     "github_actions", "github_releases", "github_account"):
+            self.assertIn(name, milelik.TOOL_NAMES)
+        calls = milelik.parse_fallback_tool_calls(
+            '<tool_call>{"name":"github_pull_requests","arguments":'
+            '{"action":"list","repo":"octo/demo"}}</tool_call>')
+        self.assertEqual(calls[0]["name"], "github_pull_requests")
+        calls = milelik.parse_fallback_tool_calls(
+            '{"tool":"play_video","arguments":{"video":"/tmp/x.mp4"}}')
+        self.assertEqual(calls[0]["name"], "vlc")
+        self.assertEqual(calls[0]["arguments"]["source"], "/tmp/x.mp4")
+        prompt = milelik.build_system_prompt(milelik.Toolbox(auto=True),
+                                             milelik.TARGET_MODEL_LABEL)
+        self.assertIn("github_pull_requests", prompt)
+        self.assertIn("vlc / media_player", prompt)
+
+
+class TestLocalGitTool(unittest.TestCase):
+    def test_status_add_commit_log_and_github_remote(self):
+        import shutil as _shutil
+        if not _shutil.which("git"):
+            self.skipTest("git not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email",
+                            "t@example.com"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name",
+                            "Test"], check=True)
+            subprocess.run(["git", "-C", str(repo), "remote", "add", "origin",
+                            "git@github.com:octo/demo.git"], check=True)
+            (repo / "a.txt").write_text("hello\n")
+            tb = milelik.Toolbox(auto=True, cwd=str(repo))
+            self.assertIn("a.txt", tb.dispatch(
+                "git_repo", {"action": "status", "path": str(repo)}))
+            self.assertIn("exit_code: 0", tb.dispatch(
+                "git_repo", {"action": "add", "path": str(repo), "files": "a.txt"}))
+            self.assertIn("initial", tb.dispatch(
+                "git_repo", {"action": "commit", "path": str(repo),
+                             "message": "initial"}))
+            self.assertIn("initial", tb.dispatch(
+                "git_repo", {"action": "log", "path": str(repo)}))
+            self.assertEqual(tb._current_github_repo(str(repo)), "octo/demo")
+            self.assertEqual(
+                milelik.Toolbox.parse_github_repo(
+                    "https://github.com/octo/demo.git"), "octo/demo")
+
+
+def _fake_github_handler(state):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def _send(self, obj, status=200):
+            body = json.dumps(obj).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            p = self.path.split("?")[0]
+            if p == "/repos/octo/demo":
+                self._send({"full_name": "octo/demo", "description": "Demo",
+                            "language": "Python", "stargazers_count": 7,
+                            "forks_count": 2, "open_issues_count": 3,
+                            "updated_at": "2026-01-01", "default_branch": "main",
+                            "clone_url": "https://github.com/octo/demo.git",
+                            "html_url": "https://github.com/octo/demo",
+                            "created_at": "2025-01-01", "topics": [],
+                            "license": {"spdx_id": "MIT"}})
+            elif p == "/repos/octo/demo/issues":
+                self._send([{"number": 3, "state": "open", "title": "Bug",
+                             "user": {"login": "amy"}, "updated_at": "2026-01-02",
+                             "html_url": "https://example/i/3",
+                             "labels": [{"name": "bug"}]}])
+            elif p == "/repos/octo/demo/pulls":
+                self._send([{"number": 4, "state": "open", "title": "Feature",
+                             "user": {"login": "bob"}, "head": {"ref": "feat"},
+                             "base": {"ref": "main"}, "updated_at": "2026-01-03",
+                             "html_url": "https://example/p/4"}])
+            elif p == "/search/repositories":
+                self._send({"total_count": 1, "items": [
+                    {"full_name": "octo/demo", "language": "Python",
+                     "stargazers_count": 1, "forks_count": 0,
+                     "open_issues_count": 0, "description": "found",
+                     "html_url": "https://example"}]})
+            elif p == "/repos/octo/demo/releases":
+                self._send([{"tag_name": "v1", "name": "One",
+                             "published_at": "2026-01-01",
+                             "html_url": "https://example/r",
+                             "assets": [{"name": "app.zip", "size": 2500000,
+                                         "download_count": 5}],
+                             "body": "notes"}])
+            elif p == "/repos/octo/demo/actions/runs":
+                self._send({"workflow_runs": [
+                    {"id": 99, "status": "completed", "conclusion": "success",
+                     "name": "CI", "head_branch": "main", "event": "push",
+                     "created_at": "2026-01-01",
+                     "html_url": "https://example/run"}]})
+            elif p == "/user":
+                self._send({"login": "octo", "name": "Octo", "public_repos": 2,
+                            "followers": 3, "following": 4,
+                            "html_url": "https://github.com/octo"})
+            else:
+                self._send({"message": "missing " + p}, 404)
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(
+                int(self.headers.get("Content-Length", 0))) or b"{}")
+            state.setdefault("posts", []).append((self.path, body))
+            self._send({"html_url": "https://example/created", "number": 12}, 201)
+
+        def do_PUT(self):
+            state.setdefault("puts", []).append(self.path)
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            self._send({"merged": True})
+
+        def log_message(self, *a):
+            pass
+    return Handler
+
+
+class TestGitHubTools(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        self.state = {}
+        self.server = http.server.HTTPServer(
+            ("127.0.0.1", 0), _fake_github_handler(self.state))
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.env_patch = mock.patch.dict(os.environ,
+                                         {"GITHUB_TOKEN": "test-token"})
+        self.env_patch.start()
+        self.addCleanup(self.env_patch.stop)
+        self.tb = milelik.Toolbox(
+            auto=True,
+            github_api_base=f"http://127.0.0.1:{self.server.server_port}")
+        self.tb.prefer_gh = False
+
+    def tearDown(self):
+        self.server.shutdown()
+
+    def test_read_tools(self):
+        self.assertIn("octo/demo", self.tb.dispatch(
+            "github_repo", {"action": "view", "repo": "octo/demo"}))
+        self.assertIn("#3", self.tb.dispatch(
+            "github_issues", {"action": "list", "repo": "octo/demo"}))
+        self.assertIn("#4", self.tb.dispatch(
+            "github_pull_requests", {"action": "list", "repo": "octo/demo"}))
+        self.assertIn("octo/demo", self.tb.dispatch(
+            "github_search", {"kind": "repositories", "query": "demo"}))
+        self.assertIn("app.zip", self.tb.dispatch(
+            "github_releases", {"action": "list", "repo": "octo/demo"}))
+        self.assertIn("run 99", self.tb.dispatch(
+            "github_actions", {"action": "list_runs", "repo": "octo/demo"}))
+        self.assertIn("octo", self.tb.dispatch(
+            "github_account", {"action": "whoami"}))
+
+    def test_create_issue_via_api(self):
+        out = self.tb.dispatch("github_issues", {
+            "action": "create", "repo": "octo/demo", "title": "Hello",
+            "body": "Body", "labels": "bug,help wanted"})
+        self.assertIn("https://example/created", out)
+        path, body = self.state["posts"][0]
+        self.assertEqual(path, "/repos/octo/demo/issues")
+        self.assertEqual(body["labels"], ["bug", "help wanted"])
+
+    def test_create_release_defaults_to_draft(self):
+        out = self.tb.dispatch("github_releases", {
+            "action": "create", "repo": "octo/demo", "tag": "v9",
+            "title": "Nine", "body": "notes"})
+        self.assertIn("https://example/created", out)
+        path, body = self.state["posts"][-1]
+        self.assertEqual(path, "/repos/octo/demo/releases")
+        self.assertEqual(body["tag_name"], "v9")
+        self.assertTrue(body["draft"])
+
+    def test_pr_merge_needs_typed_yes_even_in_yolo(self):
+        out = self.tb.dispatch("github_pull_requests", {
+            "action": "merge", "repo": "octo/demo", "number": 4})
+        self.assertIn("declined", out)
+        self.assertNotIn("puts", self.state)
+
+    def test_write_via_fake_gh_cli(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = root / "gh-calls.txt"
+            gh = root / "gh"
+            gh.write_text("#!/usr/bin/env bash\n"
+                          f"printf '%s\\n' \"$*\" >> {calls}\n"
+                          "echo https://github.com/octo/demo/issues/9\n")
+            gh.chmod(0o755)
+            with mock.patch.dict(os.environ, {
+                    "PATH": str(root) + ":" + os.environ.get("PATH", "")}):
+                tb = milelik.Toolbox(auto=True)  # prefer_gh=True by default
+                out = tb.dispatch("github_issues", {
+                    "action": "create", "repo": "octo/demo",
+                    "title": "Via gh", "body": "hello"})
+            self.assertIn("issues/9", out)
+            recorded = calls.read_text()
+            self.assertIn("issue create --repo octo/demo", recorded)
+            self.assertIn("--title Via gh", recorded)
 
 
 if __name__ == "__main__":

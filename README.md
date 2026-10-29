@@ -4,19 +4,23 @@ A **fast, local AI assistant for linux Mint**, tuned for
 **Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M**. The AI model runs 100% on
 your own computer — via [Ollama](https://ollama.com), or from the exact GGUF
 already loaded in **LM Studio** / **llama.cpp** — with no cloud and no
-accounts. It can **run shell commands** and **use the network** (fetch web
-pages, search the web, DNS lookups, port checks) to actually get things done.
+accounts. It can **run shell commands**, **use the network**, **open and
+control desktop apps** (VLC, browsers, files, terminal, LibreOffice…), and
+work with **Git and GitHub** (repos, issues, pull requests, CI, releases)
+to actually get things done.
 
-It does *not* control your mouse/screen, and it asks your permission before
-running commands — see [Safety](#-safety) below.
+It does *not* control your mouse/screen by simulating clicks, and it asks
+your permission before running commands or making changes — see
+[Safety](#-safety) below.
 
 ```
 You ──► milelik (agent) ──► local model (Ollama / LM Studio / llama.cpp)
               │
-              ├──► bash commands        (with your OK)
-              ├──► read/write files     (with your OK)
+              ├──► bash commands + files      (with your OK)
               ├──► fetch_url / web_search ──► internet
-              └──► DNS / port checks ──► your network
+              ├──► apps: VLC, browser, files, terminal, LibreOffice…
+              ├──► desktop: media, volume, screenshots, notifications…
+              └──► git_repo / github_* ─────► GitHub (repos, issues, PRs, CI)
 ```
 
 Single Python file, **zero pip dependencies** (standard library only), so it
@@ -95,6 +99,14 @@ That installs Ollama (if needed), sets up
 GGUF it finds in the usual places, or downloaded), installs the `milelik`
 command, and adds a Milelik entry to your app menu.
 
+For the app/GitHub tools, also install the small helpers they use (several
+are already in Mint; `milelik --check` reports which are present):
+
+```bash
+sudo apt install vlc playerctl gh git ffmpeg xclip brightnessctl libnotify-bin
+gh auth login   # once, for GitHub write actions (issues, PRs, merging…)
+```
+
 Then open a **new terminal** and try:
 
 ```bash
@@ -128,6 +140,71 @@ milelik "is port 22 open on 192.168.1.1? also find its hostname"
 milelik "search the web for how to enable SSH on linux Mint and summarise the steps"
 milelik "read ~/Documents/notes.txt and summarise it"
 milelik "write a bash backup script for my Documents folder and save it to ~/backup.sh"
+milelik "play ~/Videos/demo.mp4 in VLC fullscreen"
+milelik "pause VLC, set its volume to 40%, and tell me what's playing"
+milelik "open Firefox at github.com, open my Documents folder, and take a screenshot"
+milelik "convert ~/Documents/report.odt to PDF"
+milelik "in this repo: show git status, list open GitHub PRs and any failing CI"
+milelik "search GitHub for linux Mint screenshot tools written in Python"
+```
+
+### 📺 Apps, VLC and desktop tools
+
+Just ask in plain English — Milelik picks the right tool:
+
+| Tool | What it can do |
+|---|---|
+| `list_apps` | List/search installed desktop apps (from `.desktop` files) |
+| `open_app` | Launch an app by name/id (VLC, Firefox, Files, Text Editor, Settings…), optionally with a file/URL |
+| `open_target` | Open a file/folder/URL in its default app (`xdg-open`) or a named app |
+| `open_terminal` | Open a terminal window in a folder, optionally running a command |
+| `vlc` | Play/enqueue a file or stream in VLC (fullscreen/pause options), now-playing/status, play/pause/stop/next/previous, seek, volume/mute, quit |
+| `media_player` | Same playback controls for any MPRIS player (Celluloid, Rhythmbox, Spotify, browsers) via `playerctl` |
+| `media_info` | Duration/codecs/resolution of a local media file (`ffprobe`) |
+| `desktop_control` | Notifications, screenshots, clipboard read/write, system volume, brightness, battery, lock screen, wallpaper |
+| `office_document` | Open LibreOffice documents, or convert them (PDF/DOCX/ODT/TXT/CSV…) headlessly |
+
+Examples:
+```bash
+milelik "what media apps do I have installed?"
+milelik "play https://example.com/stream.m3u8 in VLC and set the volume to 70%"
+milelik "skip to the next track and tell me what's playing now"
+milelik "how long is ~/Videos/holiday.mp4 and what resolution is it?"
+milelik "notify me when you're done, copy the result to my clipboard"
+milelik "turn the brightness down 20% and check my battery"
+```
+Playback controls need `playerctl`; VLC itself just needs to be installed.
+App launches, screenshots, clipboard access, screen-lock and wallpaper
+changes ask for confirmation first (unless `--yolo`).
+
+### 🐙 Git & GitHub tools
+
+| Tool | What it can do |
+|---|---|
+| `git_repo` | Local Git: status, diff, log, branches, remotes; add, commit, push, pull, fetch, checkout/create branch, stash |
+| `github_account` | Auth status (never shows tokens), whoami, user profiles, notifications, gists |
+| `github_search` | Search repositories, code, issues/PRs, users, commits |
+| `github_repo` | View/list repos, clone, create (private by default), fork — *no repo deletion, by design* |
+| `github_issues` | List/view/create/comment/close/reopen issues (with labels) |
+| `github_pull_requests` | List/view/checks/changed files/diff, create (incl. drafts), comment, close/reopen, merge (merge/squash/rebase — needs you to type `YES`) |
+| `github_actions` | Workflows and runs: list, view, jobs, logs, rerun, cancel, manually dispatch a workflow |
+| `github_releases` | List/latest/view releases with asset names and sizes; create releases (draft by default) and upload assets |
+
+Inside a cloned repo, `repo` can be left out — Milelik uses that repo's
+GitHub `origin` remote. Read-only lookups work without an account for public
+repos; anything that *writes* uses the GitHub CLI if you're logged in
+(`gh auth login`) or a `GITHUB_TOKEN`/`GH_TOKEN` environment variable.
+**Never paste a token into the chat.**
+
+Examples:
+```bash
+milelik "who am I on GitHub, and do I have any unread notifications?"
+milelik "show the open issues labelled bug in Math-halper/BOOTMILELIK"
+milelik "list the latest release of neovim/neovim and its download assets"
+milelik "check whether the CI passed on PR #4 in this repo"
+milelik "clone cli/cli into ~/src and show me its recent commits"
+milelik "create a draft PR from my current branch titled 'Fix the thing'"
+milelik "comment 'looks good to me' on issue #3"
 ```
 
 Interactive chat (`milelik -i`) — keeps context between tasks. Inside it:
@@ -189,8 +266,13 @@ work — `host` can point at a model server on another machine on your network.
 Milelik can only do what *your user account* can do, and by default it can't
 even do that without asking:
 
-- **Every shell command and file write asks `[y/N]` first.** Saying no tells
-  the model to find another way — it won't just retry.
+- **Every shell command and file write asks `[y/N]` first**, and so do app
+  launches, Git write operations (commit/push/checkout…), and every GitHub
+  write (creating/commenting/closing issues & PRs, rerunning CI…). GitHub
+  actions run **as you**, with your `gh`/token credentials. Saying no tells
+  the model to find another way — it won't just retry. Merging a PR always
+  requires typing `YES`, repository deletion isn't supported at all, and
+  token values are never printed or sent to the model.
 - **`--yolo` only skips the ordinary prompts.** Dangerous commands
   (`rm -rf /`, `mkfs`, `dd` to a disk, `shutdown`/`reboot`,
   `curl … | bash`, fork bombs, …) always require you to type `YES`, and
@@ -228,9 +310,16 @@ Python-style `run_command(command="…")`. Common synonym mistakes by a 7B
 malformed call gets sent back with "reply in exactly this format" (twice),
 and leaked ChatML tokens (`<|im_end|>` etc.) are stripped from answers.
 If a server rejects native tools outright, Milelik falls back to the text
-protocol automatically. Tools: `run_command`, `fetch_url`,
+protocol automatically. The 26 tools: `run_command`, `fetch_url`,
 `web_search` (DuckDuckGo — no API key), `read_file`, `write_file`, `list_dir`,
-`dns_lookup`, `check_port`, `system_info`.
+`dns_lookup`, `check_port`, `system_info`, `list_apps`, `open_app`,
+`open_target`, `open_terminal`, `vlc`, `media_player`, `media_info`,
+`desktop_control`, `office_document`, `git_repo`, `github_search`,
+`github_repo`, `github_issues`, `github_pull_requests`, `github_actions`,
+`github_releases`, `github_account`. App tools use the apps' own CLIs/desktop
+entries (argument lists, never a shell), media tools use MPRIS via
+`playerctl`, and GitHub reads use the REST API while writes go through the
+`gh` CLI when available.
 
 ## 🔧 Troubleshooting
 
@@ -244,11 +333,17 @@ protocol automatically. Tools: `run_command`, `fetch_url`,
 | Very slow answers | Smaller context (`--ctx 4096`), close other heavy apps, or use a smaller model (`ollama pull qwen3:4b`). First reply after idle includes model load time. |
 | `milelik: command not found` after install | Open a new terminal (Mint adds `~/.local/bin` to PATH at login), or `export PATH="$HOME/.local/bin:$PATH"`. |
 | Web search returns nothing | DuckDuckGo sometimes rate-limits; wait a bit, or ask it to `fetch_url` a specific site. |
+| VLC opens but pause/volume/now-playing don't work | Playback control needs MPRIS via `playerctl`: `sudo apt install playerctl`. `milelik --check` lists which helpers are present. Also make sure the same desktop session is running Milelik and VLC (don't run one over plain SSH without a D-Bus session). |
+| "Application not found" | Ask it to `list_apps` first to get exact names/ids, or install the app. Flatpak/Snap apps appear once their `.desktop` files are in the standard application dirs. |
+| GitHub says 401/403 / "needs authentication" | Read-only public lookups need no login; writes do. Run `gh auth login`, or set `GITHUB_TOKEN` in your shell profile. 403 can also be rate limiting — being logged in raises the limit a lot. Check with "who am I on GitHub?" / `github_account auth_status`. |
+| GitHub tool says "no repository given" | Run Milelik inside the cloned repo (it reads the `origin` remote), or name it: "…in owner/repo". |
+| PR merge bounces at the prompt | By design: merging needs you to type `YES` (capitalised) at an interactive terminal — it can't happen from `--yolo` or piped input. |
 
 ## 🧪 Tests
 
-34 tests, no model or internet required (fake Ollama and fake
-LM Studio/OpenAI-compatible servers are used):
+45 tests, no model or internet required (fake Ollama, fake LM Studio/
+OpenAI-compatible and fake GitHub API servers, fake `gh`/`playerctl`/VLC/
+LibreOffice binaries, and a real temporary Git repo are used):
 
 ```bash
 python3 -m unittest discover -s tests -v
