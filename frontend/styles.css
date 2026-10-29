@@ -550,9 +550,6 @@ input:focus, textarea:focus, select:focus, button:focus-visible {
 
 /* Companion sprite ------------------------------------------------------- */
 .companion-card {
-  --sprite-ink: #070708;
-  --sprite-paper: #f7f7f2;
-  --sprite-mid: #8b8e94;
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -609,81 +606,35 @@ input:focus, textarea:focus, select:focus, button:focus-visible {
 
 .milelik-sprite {
   display: block;
-  width: min(178px, 72%);
+  width: min(198px, 84%);
   height: 224px;
   overflow: visible;
   filter: drop-shadow(7px 8px 0 rgb(255 255 255 / 0.08));
   transform-origin: 50% 92%;
   animation: sprite-idle 4.4s ease-in-out infinite;
 }
-.milelik-sprite path,
-.milelik-sprite rect,
-.milelik-sprite line { vector-effect: non-scaling-stroke; }
-.sprite-hair {
-  fill: var(--sprite-paper);
-  stroke: var(--sprite-ink);
-  stroke-width: 4;
-  stroke-linejoin: round;
-}
-.sprite-hair-shard.dark { fill: var(--sprite-ink); }
-.sprite-hair-shard.light { fill: #ffffff; stroke: var(--sprite-ink); stroke-width: 2; }
-.sprite-face {
-  fill: #17181b;
-  stroke: var(--sprite-paper);
-  stroke-width: 3;
-  stroke-linejoin: round;
-}
-.sprite-eye path { fill: var(--sprite-paper); }
-.sprite-eye rect { fill: var(--sprite-ink); }
 .sprite-eye {
   transform-box: fill-box;
   transform-origin: center;
   animation: sprite-blink 5.8s steps(1, end) infinite;
 }
 .sprite-mouth {
-  fill: var(--sprite-paper);
+  fill: none;
+  stroke: #e8e6df;
+  stroke-width: 4;
+  stroke-linecap: round;
   transform-box: fill-box;
   transform-origin: center;
 }
-.sprite-necklace {
-  fill: none;
-  stroke: var(--sprite-paper);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.sprite-pixels {
+  transform-box: fill-box;
+  transform-origin: center;
 }
-.sprite-torso.light, .sprite-leg.light {
-  fill: var(--sprite-paper);
-  stroke: var(--sprite-ink);
-  stroke-width: 3;
-  stroke-linejoin: round;
-}
-.sprite-torso.dark, .sprite-leg.dark, .sprite-arm {
-  fill: var(--sprite-ink);
-  stroke: var(--sprite-paper);
-  stroke-width: 3;
-  stroke-linejoin: round;
-}
-.sprite-waist {
-  fill: #2b2c30;
-  stroke: var(--sprite-paper);
-  stroke-width: 2.5;
-  stroke-linejoin: round;
-}
-.sprite-hand {
-  fill: none;
-  stroke: var(--sprite-paper);
-  stroke-width: 3.2;
-  stroke-linecap: round;
-}
-.sprite-glitch-bars rect { fill: var(--sprite-paper); opacity: 0.16; }
-.sprite-perch { stroke: var(--sprite-paper); stroke-width: 3; stroke-linecap: round; opacity: 0.72; }
 
 .sprite-stage[data-state="thinking"] .milelik-sprite {
   animation: sprite-thinking 0.9s steps(2, end) infinite;
 }
-.sprite-stage[data-state="thinking"] .sprite-glitch-bars rect {
-  opacity: 0.48;
+.sprite-stage[data-state="thinking"] .sprite-pixels {
   animation: sprite-bars 0.55s steps(2, end) infinite;
 }
 .sprite-stage[data-state="talking"] .milelik-sprite {
@@ -822,7 +773,7 @@ input:focus, textarea:focus, select:focus, button:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .milelik-sprite, .sprite-eye, .sprite-mouth,
-  .sprite-glitch-bars rect, .view.active {
+  .sprite-pixels, .view.active {
     animation: none !important;
   }
 }

@@ -479,8 +479,9 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
         ):
             self.assertIn(needle, html)
         for needle in (
-            'class="milelik-sprite"', 'class="sprite-eye"',
-            'class="sprite-mouth"', "black-and-white angular glitch companion",
+            'class="milelik-sprite"', 'class="sprite-eye sprite-eye-left"',
+            'class="sprite-eye sprite-eye-right"', 'class="sprite-mouth"',
+            'class="sprite-pixels"', "black-and-white angular glitch companion",
         ):
             self.assertIn(needle, sprite)
         self.assertIn("function setSpriteState", js)

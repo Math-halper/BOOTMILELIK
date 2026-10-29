@@ -1,34 +1,120 @@
-<!-- Milelik's original black-and-white angular glitch companion sprite. -->
-<svg xmlns="http://www.w3.org/2000/svg" class="milelik-sprite" viewBox="0 0 260 340" role="img" aria-labelledby="spriteTitle spriteDesc" focusable="false">
+<svg xmlns="http://www.w3.org/2000/svg" class="milelik-sprite" viewBox="-8 0 336 380" role="img" aria-labelledby="spriteTitle spriteDesc" focusable="false">
   <title id="spriteTitle">Milelik companion sprite</title>
-  <desc id="spriteDesc">An original black-and-white angular glitch companion with wild shard hair and long limbs.</desc>
-  <g class="sprite-glitch-bars" aria-hidden="true">
-    <rect x="34" y="74" width="42" height="5" fill="#f7f7f2" opacity="0.16"></rect>
-    <rect x="184" y="112" width="50" height="4" fill="#f7f7f2" opacity="0.16"></rect>
-    <rect x="54" y="218" width="34" height="4" fill="#f7f7f2" opacity="0.16"></rect>
-    <rect x="176" y="254" width="42" height="5" fill="#f7f7f2" opacity="0.16"></rect>
+  <desc id="spriteDesc">An original black-and-white angular glitch companion with a monitor-cat head, hoodie, boots and cable tail.</desc>
+  <defs>
+    <linearGradient id="spriteShell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f5ee"/>
+      <stop offset=".48" stop-color="#c9cac9"/>
+      <stop offset="1" stop-color="#7d7e84"/>
+    </linearGradient>
+    <linearGradient id="spriteBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9d6cc"/>
+    </linearGradient>
+    <linearGradient id="spriteBoot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e7e6e0"/>
+      <stop offset="1" stop-color="#8e9096"/>
+    </linearGradient>
+    <linearGradient id="spriteTail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#76777d"/>
+      <stop offset=".5" stop-color="#e2e1da"/>
+      <stop offset="1" stop-color="#77787e"/>
+    </linearGradient>
+  </defs>
+
+  <g class="sprite-pixels" aria-hidden="true">
+    <rect x="38" y="91" width="17" height="7" fill="#050506"/>
+    <rect x="50" y="103" width="18" height="18" fill="#050506"/>
+    <rect x="63" y="121" width="10" height="10" fill="#f6f4ec"/>
+    <rect x="253" y="83" width="28" height="28" fill="#5b5c62"/>
+    <rect x="245" y="122" width="28" height="5" fill="#050506"/>
+    <rect x="278" y="141" width="18" height="8" fill="#f6f4ec"/>
+    <rect x="39" y="251" width="9" height="9" fill="#050506"/>
+    <rect x="56" y="272" width="34" height="6" fill="#5f6066"/>
+    <rect x="35" y="292" width="30" height="7" fill="#f6f4ec"/>
+    <rect x="64" y="311" width="18" height="18" fill="#050506"/>
+    <rect x="273" y="286" width="11" height="11" fill="#f6f4ec"/>
   </g>
-  <g class="sprite-figure">
-    <path class="sprite-hair" d="M128 16 L151 47 L186 20 L179 62 L226 46 L199 89 L240 105 L197 123 L216 168 L175 140 L169 192 L139 146 L111 190 L101 138 L61 172 L70 120 L20 104 L61 88 L42 44 L84 65 L92 22 L112 57 Z" fill="#f7f7f2" stroke="#070708" stroke-width="4" stroke-linejoin="round"></path>
-    <path class="sprite-hair-shard dark" d="M79 76 L112 91 L88 124 L64 103 Z" fill="#070708"></path>
-    <path class="sprite-hair-shard dark" d="M158 72 L196 83 L174 116 L150 99 Z" fill="#070708"></path>
-    <path class="sprite-hair-shard light" d="M112 55 L132 78 L116 98 L99 72 Z" fill="#ffffff" stroke="#070708" stroke-width="2"></path>
-    <path class="sprite-arm left" d="M112 164 L91 190 L55 220 L43 214 L82 178 L103 154 Z" fill="#070708" stroke="#f7f7f2" stroke-width="3" stroke-linejoin="round"></path>
-    <path class="sprite-hand left" d="M51 215 L34 207 M52 220 L32 221 M55 225 L39 236 M61 226 L51 243" fill="none" stroke="#f7f7f2" stroke-width="3.2" stroke-linecap="round"></path>
-    <path class="sprite-arm right" d="M158 164 L178 194 L194 229 L182 235 L158 198 L146 171 Z" fill="#070708" stroke="#f7f7f2" stroke-width="3" stroke-linejoin="round"></path>
-    <path class="sprite-hand right" d="M186 230 L181 250 M191 231 L193 252 M197 228 L207 246" fill="none" stroke="#f7f7f2" stroke-width="3.2" stroke-linecap="round"></path>
-    <path class="sprite-torso light" d="M112 157 L137 149 L133 228 L103 205 Z" fill="#f7f7f2" stroke="#070708" stroke-width="3" stroke-linejoin="round"></path>
-    <path class="sprite-torso dark" d="M137 149 L161 164 L151 231 L133 228 Z" fill="#070708" stroke="#f7f7f2" stroke-width="3" stroke-linejoin="round"></path>
-    <path class="sprite-waist" d="M105 205 L151 231 L144 248 L111 226 Z" fill="#2b2c30" stroke="#f7f7f2" stroke-width="2.5" stroke-linejoin="round"></path>
-    <path class="sprite-leg light" d="M113 226 L132 238 L116 326 L96 318 L103 254 Z" fill="#f7f7f2" stroke="#070708" stroke-width="3" stroke-linejoin="round"></path>
-    <path class="sprite-leg dark" d="M133 238 L150 232 L184 306 L199 326 L169 324 L139 263 Z" fill="#070708" stroke="#f7f7f2" stroke-width="3" stroke-linejoin="round"></path>
-    <path class="sprite-face" d="M104 107 L151 99 L159 132 L132 161 L108 140 Z" fill="#17181b" stroke="#f7f7f2" stroke-width="3" stroke-linejoin="round"></path>
-    <g class="sprite-eye">
-      <path d="M115 121 L145 117 L141 130 L118 132 Z" fill="#f7f7f2"></path>
-      <rect x="127" y="121" width="7" height="7" fill="#070708"></rect>
-    </g>
-    <rect class="sprite-mouth" x="126" y="143" width="18" height="4" fill="#f7f7f2"></rect>
-    <path class="sprite-necklace" d="M119 151 L137 166 L151 151" fill="none" stroke="#f7f7f2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <ellipse cx="160" cy="359" rx="92" ry="11" fill="#000" opacity=".34"/>
+
+  <!-- segmented cable tail -->
+  <path d="M205 304 C238 309 259 287 254 252 C251 230 260 215 276 218" fill="none" stroke="#050506" stroke-width="25" stroke-linecap="round"/>
+  <path d="M205 304 C238 309 259 287 254 252 C251 230 260 215 276 218" fill="none" stroke="url(#spriteTail)" stroke-width="16" stroke-linecap="round"/>
+  <path d="M226 300 L223 315 M247 281 L238 293 M255 254 L241 257 M253 231 L240 226" stroke="#55565c" stroke-width="4" stroke-linecap="round"/>
+  <g transform="translate(-24 5) rotate(38 295 215)">
+    <rect x="278" y="199" width="34" height="27" rx="6" fill="#17181c" stroke="#050506" stroke-width="5"/>
+    <rect x="306" y="205" width="14" height="15" rx="3" fill="#d9d8d2" stroke="#050506" stroke-width="4"/>
   </g>
-  <line class="sprite-perch" x1="34" y1="329" x2="226" y2="329" stroke="#f7f7f2" stroke-width="3" stroke-linecap="round" opacity="0.72"></line>
+
+  <!-- legs -->
+  <path d="M123 292 L151 292 L148 330 L121 330 Z" fill="#b9babd" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M170 292 L198 292 L201 330 L173 330 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- boots -->
+  <path d="M112 317 L150 317 L158 344 C159 354 153 359 143 359 L103 359 C96 359 92 354 94 345 C97 330 103 320 112 317 Z" fill="url(#spriteBoot)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M171 317 L209 317 C218 320 224 330 227 345 C229 354 225 359 218 359 L178 359 C168 359 162 354 163 344 Z" fill="url(#spriteBoot)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M95 350 L157 350 L157 359 L103 359 C98 359 94 355 95 350 Z" fill="#111216"/>
+  <path d="M164 350 L226 350 C227 355 223 359 218 359 L164 359 Z" fill="#111216"/>
+  <ellipse cx="119" cy="338" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
+  <ellipse cx="201" cy="338" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
+
+  <!-- right arm behind torso -->
+  <path d="M208 235 C224 248 233 262 236 278" fill="none" stroke="#050506" stroke-width="29" stroke-linecap="round"/>
+  <path d="M208 235 C224 248 233 262 236 278" fill="none" stroke="#24252a" stroke-width="20" stroke-linecap="round"/>
+
+  <!-- hoodie -->
+  <path d="M107 222 C121 210 139 205 160 205 C181 205 199 210 213 222 L221 286 C222 299 214 306 201 306 L119 306 C106 306 98 299 99 286 Z" fill="#17181c" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M119 219 C132 213 146 211 160 211 C174 211 188 213 201 219 L207 285 C208 294 203 298 195 298 L125 298 C117 298 112 294 113 285 Z" fill="url(#spriteBody)"/>
+  <path d="M126 271 L139 282 L181 282 L194 271 L198 298 L122 298 Z" fill="#efeee8" stroke="#77787e" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M145 224 L141 245 M175 224 L179 245" stroke="#17181c" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="141" cy="249" r="3.5" fill="#17181c"/>
+  <circle cx="179" cy="249" r="3.5" fill="#17181c"/>
+  <path d="M147 264 L147 246 L160 258 L173 246 L173 264" fill="none" stroke="#77787e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- raised left sleeve -->
+  <path d="M112 219 C95 210 78 198 64 181 L77 165 C90 182 104 193 120 202 Z" fill="#24252a" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M78 176 C90 189 102 199 114 206" fill="none" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- terminal in right paw -->
+  <g transform="rotate(5 226 278)">
+    <rect x="199" y="250" width="54" height="62" rx="8" fill="#101114" stroke="#050506" stroke-width="5"/>
+    <rect x="206" y="257" width="40" height="48" rx="5" fill="#050506" stroke="#55565c" stroke-width="2"/>
+    <path d="M213 272 L223 279 L213 286" fill="none" stroke="#f6f4ec" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="226" y="286" width="13" height="4" fill="#f6f4ec"/>
+  </g>
+  <path d="M218 296 C226 287 242 289 246 299 C250 309 242 319 231 318 C220 317 213 305 218 296 Z" fill="#c9cac9" stroke="#050506" stroke-width="4"/>
+  <path d="M226 299 L238 302 M224 308 L237 309" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- ears -->
+  <path d="M88 82 C88 57 94 38 105 27 C118 38 132 57 141 77 L119 94 C101 94 88 91 88 82 Z" fill="url(#spriteShell)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M101 72 C102 59 106 48 112 41 C119 50 126 61 130 71 C121 79 109 80 101 72 Z" fill="#f7f5ee"/>
+  <path d="M232 82 C232 57 226 38 215 27 C202 38 188 57 179 77 L201 94 C219 94 232 91 232 82 Z" fill="url(#spriteShell)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M219 72 C218 59 214 48 208 41 C201 50 194 61 190 71 C199 79 211 80 219 72 Z" fill="#f7f5ee"/>
+
+  <!-- monitor head -->
+  <rect x="75" y="68" width="170" height="143" rx="30" fill="url(#spriteShell)" stroke="#050506" stroke-width="6"/>
+  <rect x="61" y="119" width="18" height="49" rx="9" fill="#a9aaad" stroke="#050506" stroke-width="5"/>
+  <rect x="241" y="119" width="18" height="49" rx="9" fill="#a9aaad" stroke="#050506" stroke-width="5"/>
+  <!-- waving paw, in front of the left side knob -->
+  <g transform="translate(5 22)">
+    <path d="M31 157 C24 147 28 135 38 133 C39 123 51 118 58 125 C66 118 78 124 77 135 C86 141 84 154 75 158 C69 169 53 172 44 165 C38 164 34 161 31 157 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M43 138 L47 152 M56 133 L58 149 M69 137 L67 152" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <path d="M145 72 C141 59 145 48 154 41 C155 50 159 55 166 58 C159 59 155 63 154 70 C166 63 177 65 184 73 C172 78 156 78 145 72 Z" fill="#d9d8d2" stroke="#050506" stroke-width="4" stroke-linejoin="round"/>
+
+  <rect class="sprite-face" x="90" y="83" width="140" height="113" rx="22" fill="#07080a" stroke="#050506" stroke-width="4"/>
+  <path d="M102 94 C116 87 137 84 155 86 C138 94 119 104 105 117 C99 109 98 100 102 94 Z" fill="#fff" opacity=".13"/>
+
+  <g class="sprite-eye sprite-eye-left">
+    <ellipse cx="128" cy="137" rx="17" ry="23" fill="#fff" opacity=".16"/>
+    <ellipse cx="128" cy="137" rx="11" ry="17" fill="#fff"/>
+  </g>
+  <g class="sprite-eye sprite-eye-right">
+    <ellipse cx="192" cy="137" rx="17" ry="23" fill="#fff" opacity=".16"/>
+    <ellipse cx="192" cy="137" rx="11" ry="17" fill="#fff"/>
+  </g>
+  <path d="M151 154 C155 150 165 150 169 154 C167 159 153 159 151 154 Z" fill="#c9cac9"/>
+  <path class="sprite-mouth" d="M146 163 Q153 171 160 164 Q167 171 174 163" fill="none" stroke="#e8e6df" stroke-width="4" stroke-linecap="round"/>
+  <path d="M107 160 L121 163 M199 163 L213 160" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
 </svg>
