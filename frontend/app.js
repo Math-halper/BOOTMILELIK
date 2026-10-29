@@ -19,6 +19,7 @@ const state = {
   chatBusy: false,
   editorDirty: false,
   loadedWorkspace: false,
+  localModels: null,
 };
 
 function savedToken() {
@@ -117,6 +118,7 @@ function fillSettings(settings) {
   state.settings = { ...settings };
   const values = {
     "set-model": settings.model || "",
+    "set-models-dir": settings.models_dir || "",
     "set-backend": settings.backend || "auto",
     "set-host": settings.host || "",
     "set-ctx": settings.ctx ?? 8192,
@@ -135,6 +137,9 @@ function fillSettings(settings) {
   $("#set-auto").checked = Boolean(settings.auto);
   $("#set-open-browser").checked = settings.open_browser !== false;
   $("#set-frontend-enabled").checked = settings.frontend_enabled !== false;
+  const discovery = $("#set-model-discovery");
+  if (discovery) discovery.checked = settings.model_discovery !== false;
+  renderLocalModelOptions(settings.local_models || state.localModels, settings.model_file || "");
   applyTheme(settings.ui_theme);
 }
 
@@ -145,6 +150,66 @@ function renderModelOptions(models) {
     const option = document.createElement("option");
     option.value = model;
     list.append(option);
+  }
+}
+
+function renderLocalModelOptions(localModels, configuredFile = "") {
+  const select = $("#set-model-file");
+  const summary = $("#modelFileSummary");
+  if (!select) return;
+  if (localModels) state.localModels = localModels;
+  const payload = state.localModels || {};
+  const files = payload.files || [];
+  const selected = payload.selected || null;
+  const previous = select.value;
+  select.replaceChildren();
+  const serverOption = document.createElement("option");
+  serverOption.value = "";
+  serverOption.textContent = "Use configured/server model";
+  select.append(serverOption);
+  for (const file of files) {
+    const option = document.createElement("option");
+    option.value = file.id || file.path || file.name || "";
+    option.disabled = !file.supported;
+    option.textContent = file.supported
+      ? `${file.name} — ${file.size_human || ""}${file.part_count > 1 ? ` · ${file.part_count} shards` : ""}`
+      : `${file.name} — ${file.format || "unsupported"} (not runnable)`;
+    option.title = file.path || file.name || "";
+    select.append(option);
+  }
+  let value = "";
+  if (selected && (selected.id || selected.path)) value = selected.id || selected.path;
+  if (!value && configuredFile) {
+    const match = files.find((file) => file.id === configuredFile || file.path === configuredFile || file.name === configuredFile);
+    if (match) value = match.id || match.path || "";
+  }
+  if (!value && previous && files.some((file) => file.id === previous || file.path === previous)) value = previous;
+  select.value = value;
+  if (summary) {
+    const folders = (payload.directories || []).join(", ");
+    if (selected) {
+      summary.textContent = `Selected model file: ${selected.name} (${selected.size_human || ""}) — ${selected.path}`;
+    } else if (files.length) {
+      summary.textContent = `Found ${files.length} model file(s), ${payload.runnable_count ?? 0} runnable GGUF(s). Choose one above, or keep the configured/server model.${folders ? ` Scanned: ${folders}.` : ""}`;
+    } else {
+      summary.textContent = `No AI model files found yet. Put a .gguf file in Milelik's models/ folder, then rescan.${folders ? ` Scanned: ${folders}.` : ""}`;
+    }
+  }
+}
+
+async function refreshLocalModels() {
+  const button = $("#refreshModelsBtn");
+  const oldText = button ? button.textContent : "";
+  if (button) { button.disabled = true; button.textContent = "Scanning models folder…"; }
+  try {
+    const data = await api("/api/models");
+    renderLocalModelOptions(data.local_models || {}, $("#set-model-file")?.value || "");
+    renderModelOptions(data.models || []);
+    const local = data.local_models || {};
+    toast(`Model scan complete: ${local.runnable_count ?? 0} runnable GGUF file(s) found.`);
+    return data;
+  } finally {
+    if (button) { button.disabled = false; button.textContent = oldText; }
   }
 }
 
@@ -160,12 +225,14 @@ async function refreshStatus() {
     const available = Boolean(model.model_available);
     dot.className = `status-dot ${available ? "ok" : "bad"}`;
     $("#statusText").textContent = available ? "Local model ready" : "Front end ready — model needs attention";
+    const selectedFile = model.selected_model_file || status.local_models?.selected;
     $("#modelSummary").textContent = available
-      ? `${model.selected_model || model.configured_model} via ${model.selected_backend || model.configured_backend}`
-      : `${model.configured_model || "No model configured"} — open Preferences or start Ollama/LM Studio`;
+      ? `${model.selected_model || model.configured_model} via ${model.selected_backend || model.configured_backend}${selectedFile ? ` · file: ${selectedFile.name}` : ""}`
+      : `${model.configured_model || "No model configured"}${selectedFile ? ` · file: ${selectedFile.name}` : ""} — open Preferences or start Ollama/LM Studio`;
     $("#workspaceSummary").textContent = status.workspace || "";
     $("#workspaceRootLabel").textContent = status.workspace || "";
     renderModelOptions(model.available_models || []);
+    renderLocalModelOptions(status.local_models || status.settings?.local_models || {}, status.settings?.model_file || "");
 
     const tools = $("#toolList");
     tools.replaceChildren();
@@ -187,6 +254,9 @@ async function saveSettings(event) {
   event.preventDefault();
   const payload = {
     model: $("#set-model").value.trim(),
+    models_dir: $("#set-models-dir").value.trim(),
+    model_file: $("#set-model-file").value,
+    model_discovery: $("#set-model-discovery").checked,
     backend: $("#set-backend").value,
     host: $("#set-host").value.trim(),
     ctx: Number($("#set-ctx").value),
@@ -730,6 +800,21 @@ function bindEvents() {
   $("#denyApprovalBtn").addEventListener("click", () => decideApproval(false));
 
   $("#settingsForm").addEventListener("submit", saveSettings);
+  $("#refreshModelsBtn").addEventListener("click", () => {
+    refreshLocalModels().catch((e) => toast(errorText(e), true));
+  });
+  $("#set-model-file").addEventListener("change", async (event) => {
+    try {
+      const result = await api("/api/models/select", {
+        method: "POST",
+        body: { model_file: event.target.value },
+      });
+      if (result.settings) fillSettings(result.settings);
+      renderLocalModelOptions(result.local_models || {}, event.target.value);
+      toast(event.target.value ? "Local model file selected." : "Using the configured/server model.");
+      await refreshStatus();
+    } catch (error) { toast(errorText(error), true); }
+  });
   $("#set-ui-theme").addEventListener("change", (event) => applyTheme(event.target.value));
   $("#saveTokenBtn").addEventListener("click", async () => {
     storeToken($("#tokenInput").value.trim());

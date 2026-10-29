@@ -13,7 +13,7 @@ and install by hand.
 | VLC/media, desktop, LibreOffice, Git/GitHub, Node/npm and Python project packages | [`apt-tools.txt`](apt-tools.txt) | `install-dependencies.sh` (the default full mode) |
 | Extra fallback programs | [`apt-optional.txt`](apt-optional.txt) | `install-dependencies.sh --with-optional` |
 | Ollama runtime | Bootstrap logic in [`../install.sh`](../install.sh) | The main installer |
-| Qwen2.5-Coder model | Model identity/template/setup logic in [`../milelik.py`](../milelik.py), [`../setup-model.sh`](../setup-model.sh) and [`../Modelfile.qwen2.5-coder-abliterated`](../Modelfile.qwen2.5-coder-abliterated) | The main installer, from an existing GGUF or the Ollama library |
+| Qwen2.5-Coder model | Model identity/template/setup logic in [`../milelik.py`](../milelik.py), [`../setup-model.sh`](../setup-model.sh) and [`../Modelfile.qwen2.5-coder-abliterated`](../Modelfile.qwen2.5-coder-abliterated), plus the user-supplied [`../models/`](../models/) folder read at startup | The main installer / Milelik startup discovery, from an existing GGUF or the Ollama library |
 | LM Studio / llama.cpp | Optional alternative model servers detected by `milelik.py` | The user, only if they prefer them to Ollama |
 
 ## Install or verify the system packages

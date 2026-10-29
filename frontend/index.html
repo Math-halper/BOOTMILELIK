@@ -378,6 +378,24 @@
             <input id="set-model" list="modelOptions" autocomplete="off">
             <datalist id="modelOptions"></datalist>
 
+            <label for="set-model-file">Model file from <code>models/</code></label>
+            <select id="set-model-file">
+              <option value="">Use configured/server model</option>
+            </select>
+            <div id="modelFileSummary" class="preference-explainer">
+              Milelik reads its <code>models/</code> folder at startup. Put GGUF files there, then choose one here.
+            </div>
+
+            <label for="set-models-dir">Models folder <span class="muted">(optional override)</span></label>
+            <input id="set-models-dir" placeholder="~/models or /path/to/models" autocomplete="off">
+
+            <label class="checkbox-card">
+              <input id="set-model-discovery" type="checkbox" checked>
+              <span><strong>Read models/ at startup</strong><br>
+              <span class="muted">Inventory all AI model files in Milelik's models folders and choose from them.</span></span>
+            </label>
+            <button id="refreshModelsBtn" class="button secondary" type="button">↻ Rescan models folder</button>
+
             <label for="set-backend">Model server</label>
             <select id="set-backend">
               <option value="auto">Automatic — Ollama, LM Studio or llama.cpp</option>

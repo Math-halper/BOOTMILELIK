@@ -718,6 +718,8 @@ def language_for_path(path: Path) -> str:
 API_CATALOG = [
     {"method": "GET", "path": "/api/health", "category": "System", "description": "Check that the local API is running.", "example": {}},
     {"method": "GET", "path": "/api/status", "category": "System", "description": "Model, backend, workspace and helper status.", "example": {}},
+    {"method": "GET", "path": "/api/models", "category": "Models", "description": "List backend models and all AI model files discovered in Milelik's models/ folders.", "example": {}},
+    {"method": "POST", "path": "/api/models/select", "category": "Models", "description": "Choose a local model file by id, filename, path or Ollama name; send {} or model_file=\"\" to use the configured server model.", "example": {"model_file": "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"}},
     {"method": "POST", "path": "/api/chat", "category": "AI", "description": "Send a task to Milelik's local model and its tools.", "example": {"message": "What is my disk space and local IP?"}},
     {"method": "POST", "path": "/api/tools/run", "category": "AI tools", "description": "Call one of Milelik's 26 tools directly.", "example": {"tool": "system_info", "arguments": {}}},
     {"method": "GET", "path": "/api/workspace", "category": "Workspace", "description": "Get the workspace tree and project run suggestions.", "example": {}},
@@ -772,7 +774,8 @@ def openapi_spec(host="127.0.0.1", port=DEFAULT_PORT, version="dev") -> dict:
 # ---------------------------------------------------------------------------
 
 class WebState:
-    def __init__(self, core_module, workspace, token: str | None = None):
+    def __init__(self, core_module, workspace, token: str | None = None,
+                 models_dir=None, model_file=None):
         if core_module is None:
             raise RuntimeError("milelik.py could not be imported")
         self.core = core_module
@@ -789,13 +792,136 @@ class WebState:
         self._state_lock = threading.RLock()
         self._transcript: list[dict] = []
         self._approvals: dict[str, dict] = {}
+        self.models_dir_override = models_dir
+        self._startup_model_file = model_file or ""
+        self._local_models: list[dict] | None = None
+        self._local_model_directories: list[str] = []
+        self._selected_local_model: dict | None = None
+        self._models_scanned_at: str | None = None
+        try:
+            self.refresh_local_models(initial=True)
+        except Exception:
+            self._local_models = []
 
-    # -- settings ---------------------------------------------------------
-    def effective_config(self) -> dict:
+    # -- local model files -------------------------------------------------
+    def _raw_config(self) -> dict:
         defaults = self.core.default_config() if hasattr(self.core, "default_config") else {}
         cfg = dict(defaults)
         cfg.update(self.core.load_config())
         cfg["workspace"] = str(self.workspace.root)
+        return cfg
+
+    def _derived_model_name(self, cfg: dict, record: dict | None = None) -> str:
+        record = record or self._selected_local_model
+        if not record:
+            return str(cfg.get("model") or getattr(self.core, "DEFAULT_MODEL", ""))
+        backend = str(cfg.get("backend") or "auto").lower()
+        host = str(cfg.get("host") or "")
+        inferred = self.core.infer_backend_from_host(host) if host and \
+            hasattr(self.core, "infer_backend_from_host") else ""
+        if backend == "openai" or inferred == "openai":
+            return str(record.get("stem") or record.get("name") or "")
+        if backend == "ollama" or inferred == "ollama":
+            return str(record.get("ollama_name") or record.get("stem") or "")
+        return str(record.get("stem") or record.get("name") or "")
+
+    def refresh_local_models(self, initial: bool = False) -> list[dict]:
+        """Re-read models/ and keep/choose Milelik's startup model file."""
+        if not hasattr(self.core, "discover_model_files"):
+            self._local_models = []
+            return []
+        with self._state_lock:
+            cfg = self._raw_config()
+            directories = self.core.model_directories(
+                self.models_dir_override or cfg.get("models_dir") or None, cfg=cfg)
+            discovery_enabled = bool(cfg.get("model_discovery", True))
+            records = self.core.discover_model_files(directories, cfg=cfg) \
+                if discovery_enabled or self._startup_model_file else []
+            selector = self._startup_model_file or cfg.get("model_file") or ""
+            if initial:
+                selected = self.core.choose_model_file(
+                    records, configured_model=str(cfg.get("model") or ""),
+                    selected_model_file=str(selector), interactive=False)
+            elif self._selected_local_model:
+                selected = self.core.find_model_file(
+                    str(self._selected_local_model.get("id") or
+                        self._selected_local_model.get("path") or ""), records)
+            elif selector:
+                selected = self.core.choose_model_file(
+                    records, configured_model=str(cfg.get("model") or ""),
+                    selected_model_file=str(selector), interactive=False)
+            else:
+                selected = None
+            self._local_models = records
+            self._local_model_directories = [str(d) for d in directories]
+            self._selected_local_model = selected
+            self._models_scanned_at = _dt.datetime.now().isoformat(timespec="seconds")
+            return list(records)
+
+    def local_models(self, refresh: bool = False) -> list[dict]:
+        if refresh or self._local_models is None:
+            return self.refresh_local_models()
+        return list(self._local_models)
+
+    def local_models_payload(self, refresh: bool = False) -> dict:
+        records = self.local_models(refresh=refresh)
+        return {
+            "directories": list(self._local_model_directories),
+            "files": records,
+            "selected": self._selected_local_model,
+            "selected_id": (self._selected_local_model or {}).get("id"),
+            "runnable_count": sum(1 for r in records if r.get("supported")),
+            "scanned_at": self._models_scanned_at,
+        }
+
+    def select_local_model(self, data: dict | None = None) -> dict:
+        data = data if isinstance(data, dict) else {}
+        selector = str(data.get("model_file") or data.get("id") or
+                       data.get("path") or data.get("model") or \
+                       data.get("name") or "").strip()
+        records = self.local_models(refresh=bool(data.get("refresh", True)))
+        with self._state_lock:
+            if not selector:
+                self._selected_local_model = None
+                self._startup_model_file = ""
+                self.core.update_config(model_file="")
+            else:
+                record = self.core.find_model_file(selector, records)
+                if record is None:
+                    candidate = Path(os.path.expanduser(selector))
+                    if candidate.is_file():
+                        record = self.core.model_file_record_for_path(candidate)
+                if record is None:
+                    raise ApiError(f"Model file not found in models/: {selector}", 404)
+                if not record.get("supported"):
+                    raise ApiError(
+                        "That model file is not runnable by Milelik's GGUF backends"
+                        + (f": {record.get('reason')}" if record.get("reason") else ""))
+                self._selected_local_model = record
+                self._startup_model_file = str(record.get("path") or "")
+                cfg = self._raw_config()
+                updates = {"model_file": self._startup_model_file,
+                           "model": self._derived_model_name(cfg, record)}
+                if self.models_dir_override:
+                    updates["models_dir"] = str(self.models_dir_override)
+                self.core.update_config(**updates)
+        with self._agent_lock:
+            self._agent = None
+            self._client = None
+        return {"ok": True, "local_models": self.local_models_payload(),
+                "settings": self.effective_config()}
+
+    # -- settings ---------------------------------------------------------
+    def effective_config(self) -> dict:
+        cfg = self._raw_config()
+        if self.models_dir_override:
+            cfg["models_dir"] = str(self.models_dir_override)
+        if self._selected_local_model:
+            cfg["model_file"] = str(self._selected_local_model.get("path") or "")
+            cfg["model"] = self._derived_model_name(cfg)
+        elif self._startup_model_file:
+            cfg["model_file"] = self._startup_model_file
+        cfg["local_models"] = self.local_models_payload()
         return cfg
 
     def update_settings(self, data: dict) -> dict:
@@ -833,6 +959,8 @@ class WebState:
 
         text("model", 300)
         text("host", 300)
+        text("models_dir", 1000)
+        text("model_file", 1000)
         text("workspace", 1000)
         text("web_host", 200)
         choice("backend", ("auto", "ollama", "openai"))
@@ -842,17 +970,62 @@ class WebState:
         integer("max_steps", 1, 50)
         integer("cmd_timeout", 5, 900)
         integer("web_port", 1, 65535)
-        for key in ("auto", "open_browser", "frontend_enabled"):
+        for key in ("auto", "open_browser", "frontend_enabled", "model_discovery"):
             boolean(key)
         if not clean:
             raise ApiError("No recognised settings were supplied.")
+
+        if "models_dir" in clean:
+            self.models_dir_override = str(clean["models_dir"]) or None
+            self._local_models = None
+        if "model_file" in clean:
+            selector = str(clean["model_file"] or "")
+            if not selector:
+                self._selected_local_model = None
+                self._startup_model_file = ""
+            else:
+                records = self.local_models(refresh=True)
+                record = self.core.find_model_file(selector, records)
+                if record is None and Path(os.path.expanduser(selector)).is_file():
+                    record = self.core.model_file_record_for_path(selector)
+                if record is None:
+                    raise ApiError(f"Model file not found in models/: {selector}", 404)
+                if not record.get("supported"):
+                    raise ApiError(
+                        "That model file is not runnable by Milelik's GGUF backends"
+                        + (f": {record.get('reason')}" if record.get("reason") else ""))
+                prospective = self._raw_config()
+                prospective.update(clean)
+                self._selected_local_model = record
+                self._startup_model_file = str(record.get("path") or "")
+                clean["model_file"] = self._startup_model_file
+                clean["model"] = self._derived_model_name(prospective, record)
+        elif "model" in clean:
+            records = self.local_models()
+            matching = self.core.find_model_file(str(clean["model"]), records)
+            if matching and self._selected_local_model and \
+                    matching.get("id") == self._selected_local_model.get("id"):
+                clean["model_file"] = str(matching.get("path") or "")
+            else:
+                clean["model_file"] = ""
+                self._selected_local_model = None
+                self._startup_model_file = ""
+        if clean.get("model_discovery") is False and not clean.get("model_file"):
+            self._selected_local_model = None
+            self._startup_model_file = ""
 
         if "workspace" in clean:
             self.workspace.set_root(str(clean["workspace"]))
             clean["workspace"] = str(self.workspace.root)
         self.core.update_config(**clean)
+        if "models_dir" in clean or "model_discovery" in clean:
+            self.refresh_local_models()
+            if self._selected_local_model:
+                clean["model"] = self._derived_model_name(
+                    self._raw_config(), self._selected_local_model)
         if {"model", "backend", "host", "ctx", "max_steps", "auto",
-                "cmd_timeout", "workspace"} & set(clean):
+                "cmd_timeout", "workspace", "models_dir", "model_file",
+                "model_discovery"} & set(clean):
             with self._agent_lock:
                 self._agent = None
                 self._client = None
@@ -921,6 +1094,8 @@ class WebState:
         cfg = self.effective_config()
         model_status = {"configured_model": cfg.get("model"),
                         "configured_backend": cfg.get("backend"),
+                        "configured_model_file": cfg.get("model_file"),
+                        "selected_model_file": self._selected_local_model,
                         "server_up": False, "model_available": False,
                         "available_models": []}
         try:
@@ -938,6 +1113,20 @@ class WebState:
                         str(cfg.get("model") or ""), update=False))
                 except Exception:
                     available = False
+                if not available and self._selected_local_model and \
+                        getattr(client, "backend", "") == "ollama":
+                    try:
+                        found_local = client.resolve_available_model(
+                            str(self._selected_local_model.get("ollama_name") or ""),
+                            update=False)
+                    except Exception:
+                        found_local = ""
+                    if found_local:
+                        available = True
+                        try:
+                            client.model = found_local
+                        except Exception:
+                            pass
             model_status.update({
                 "selected_backend": getattr(client, "backend", "unknown"),
                 "selected_model": getattr(client, "model", ""),
@@ -959,6 +1148,7 @@ class WebState:
             "web": {"host": self.bound_host, "port": self.bound_port,
                     "token_required": True},
             "model": model_status,
+            "local_models": self.local_models_payload(),
             "settings": cfg,
             "tools": list(getattr(self.core, "TOOL_NAMES", [])),
             "helpers": helpers,
@@ -971,9 +1161,11 @@ class WebState:
             client = self._select_client()
             models = list(client.tags(timeout=5)) if client.is_up() else []
             return {"backend": getattr(client, "backend", ""),
-                    "host": getattr(client, "host", ""), "models": models}
+                    "host": getattr(client, "host", ""), "models": models,
+                    "local_models": self.local_models_payload(refresh=True)}
         except Exception as e:
-            return {"backend": "", "host": "", "models": [], "error": str(e)}
+            return {"backend": "", "host": "", "models": [], "error": str(e),
+                    "local_models": self.local_models_payload(refresh=True)}
 
     def system_payload(self) -> dict:
         toolbox = self.core.Toolbox(auto=True, cwd=str(self.workspace.root))
@@ -1003,6 +1195,25 @@ class WebState:
                     "No local model server is running. Start Ollama with "
                     "`ollama serve`, or load the GGUF in LM Studio/llama.cpp "
                     "and start its local server.", 503)
+            if not client.model_available() and self._selected_local_model and \
+                    getattr(client, "backend", "") == "ollama":
+                record = self._selected_local_model
+                imported_name = str(record.get("ollama_name") or "")
+                found_local = ""
+                try:
+                    found_local = client.resolve_available_model(
+                        imported_name, update=False)
+                except Exception:
+                    found_local = ""
+                if found_local:
+                    client.model = found_local
+                elif self.core.import_gguf_to_ollama(
+                        str(record.get("path") or ""), imported_name):
+                    client.model = imported_name
+                    self.core.update_config(model=imported_name, backend="ollama")
+                    if hasattr(self.core, "save_model_file_preference"):
+                        self.core.save_model_file_preference(
+                            record, model=imported_name)
             if not client.model_available():
                 loaded = []
                 try:
@@ -1478,9 +1689,12 @@ class MilelikHandler(BaseHTTPRequestHandler):
                     str(data.get("typed_yes") or "")))
                 return
 
-            data = self._read_json(required=path not in ("/api/chat/reset",))
+            data = self._read_json(required=path not in (
+                "/api/chat/reset", "/api/models/select"))
             if path == "/api/settings" and method in ("POST", "PUT"):
                 self._send_json(self.state.update_settings(data))
+            elif path == "/api/models/select" and method == "POST":
+                self._send_json(self.state.select_local_model(data))
             elif path == "/api/chat" and method == "POST":
                 self._send_json(self.state.chat(str(data.get("message") or "")))
             elif path == "/api/chat/reset" and method == "POST":
@@ -1558,8 +1772,10 @@ class MilelikHandler(BaseHTTPRequestHandler):
 
 def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
                   workspace="~/MilelikWorkspace", core_module=None,
-                  token: str | None = None) -> MilelikHTTPServer:
-    state = WebState(core_module or core, workspace, token)
+                  token: str | None = None, models_dir=None,
+                  model_file=None) -> MilelikHTTPServer:
+    state = WebState(core_module or core, workspace, token,
+                     models_dir=models_dir, model_file=model_file)
     server = MilelikHTTPServer((str(host), int(port)), MilelikHandler, state)
     state.bound_host, state.bound_port = server.server_address[:2]
     return server
@@ -1571,9 +1787,11 @@ def _display_host(host: str) -> str:
 
 def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
                workspace="~/MilelikWorkspace", open_browser: bool = True,
-               core_module=None, token: str | None = None) -> int:
+               core_module=None, token: str | None = None, models_dir=None,
+               model_file=None) -> int:
     try:
-        server = create_server(host, port, workspace, core_module, token)
+        server = create_server(host, port, workspace, core_module, token,
+                               models_dir=models_dir, model_file=model_file)
     except OSError as e:
         print(f"Could not start Milelik's front end on {host}:{port}: {e}", file=sys.stderr)
         print("Try another port, for example: milelik --gui --web-port 8766", file=sys.stderr)
@@ -1584,6 +1802,11 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
     print("\n🤖 Milelik front end is running", flush=True)
     print(f"   Open:      {url}", flush=True)
     print(f"   Workspace: {state.workspace.root}", flush=True)
+    local = state.local_models_payload()
+    selected_file = local.get("selected") or {}
+    print(f"   Model files: {local.get('runnable_count', 0)} runnable GGUF(s)"
+          + (f"; selected {selected_file.get('name')}" if selected_file else ""),
+          flush=True)
     print(f"   API docs:  http://{_display_host(host)}:{state.bound_port}/api/docs", flush=True)
     print(f"   API token header: {TOKEN_HEADER}: {state.token}", flush=True)
     print("   Press Ctrl+C to stop. Keep the token private: it can run local code.\n", flush=True)
@@ -1609,14 +1832,28 @@ def parse_args(argv=None):
     parser.add_argument("--host", default=cfg.get("web_host", DEFAULT_HOST))
     parser.add_argument("--port", type=int, default=int(cfg.get("web_port", DEFAULT_PORT)))
     parser.add_argument("--workspace", default=cfg.get("workspace", "~/MilelikWorkspace"))
+    parser.add_argument("--models-dir", default=os.environ.get(
+        "MILELIK_MODELS_DIR", cfg.get("models_dir") or None),
+                        help="folder searched recursively for local model files")
+    parser.add_argument("--model-file", default=os.environ.get(
+        "MILELIK_MODEL_FILE", cfg.get("model_file") or None),
+                        help="choose a local model by path, filename, id or Ollama name")
+    parser.add_argument("--list-models", action="store_true",
+                        help="list model files in models/ and exit")
     parser.add_argument("--no-open-browser", action="store_true")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.list_models:
+        directories = core.model_directories(args.models_dir)
+        print(core.format_model_inventory(
+            core.discover_model_files(directories), directories))
+        return 0
     return run_server(args.host, args.port, args.workspace,
-                      open_browser=not args.no_open_browser, core_module=core)
+                      open_browser=not args.no_open_browser, core_module=core,
+                      models_dir=args.models_dir, model_file=args.model_file)
 
 
 if __name__ == "__main__":

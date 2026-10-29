@@ -24,7 +24,9 @@ Terminal ───────────────────────�
                                                    └──► git_repo / github_* ──► GitHub
 ```
 
-Pure Python standard library, **zero pip dependencies**. The guided installer
+Pure Python standard library, **zero pip dependencies**. At startup Milelik
+reads every AI model file in its `models/` folder and chooses a runnable GGUF
+from what it finds. The guided installer
 asks for your model, safety, workspace and front-end preferences. Every system
 dependency is declared in this repository under
 [`dependencies/`](dependencies/) and installed automatically, so there are no
@@ -42,6 +44,31 @@ This model goes by different names in different places; Milelik recognises
 | LM Studio | `qwen2.5-coder-7b-instruct-abliterated-q4_k_m` |
 | Hugging Face | `bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF:Q4_K_M` |
 | After `./setup-model.sh` | `milelik-coder:7b` (your GGUF imported into Ollama) |
+
+### Put model files in `models/`
+
+Milelik has a dedicated [`models/`](models/) folder. Put one or more GGUF
+files there (subfolders are fine), and when Milelik starts it inventories all
+of them and chooses from those files:
+
+```bash
+cp ~/Downloads/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf models/
+milelik --list-models       # see every model file Milelik can see
+milelik --choose-model -i   # pick a file interactively, then chat
+milelik --model-file Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf "check my disk"
+```
+
+The installed copy also has `~/.local/share/milelik/models/`; Milelik checks
+that folder, a `./models/` folder in your launch directory, and an optional
+`--models-dir`/`models_dir` override. GGUF is the runnable format for Ollama,
+LM Studio and llama.cpp. SafeTensors, ONNX, PyTorch and generic `.bin` files
+are listed in the inventory but marked non-runnable rather than being fed to
+the wrong runtime. Split GGUF shards (`...-00001-of-00002.gguf`, etc.) are
+shown as one model. If an Ollama model has not been imported yet, selecting a
+local GGUF imports it automatically; Qwen2.5-Coder files receive Milelik's
+Qwen template, while other GGUFs keep a minimal template so Ollama can use the
+file's own metadata. Model binaries inside `models/` are ignored by Git — see
+[`models/README.md`](models/README.md).
 
 Three ways to run it — use whichever matches what you already have:
 
@@ -63,8 +90,9 @@ Qwen2.5-Coder ChatML + tool-calling template) instead of downloading it again:
 milelik --import-gguf ~/Downloads/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
 milelik "check my disk"   # now uses it by default, as milelik-coder:7b
 ```
-`./setup-model.sh` with no arguments searches this folder, `~/Downloads`,
-`~/models` and LM Studio's model folders for the file. The Modelfile used is
+`./setup-model.sh` with no arguments searches Milelik's `models/` folders,
+this folder, `~/Downloads`, `~/models` and LM Studio's model folders for the
+file. The Modelfile used is
 [`Modelfile.qwen2.5-coder-abliterated`](Modelfile.qwen2.5-coder-abliterated) —
 importing a raw Qwen GGUF *without* its template is the usual reason tool
 calls come out as rambling text or the model never stops talking.
@@ -103,7 +131,9 @@ Enter to accept a highlighted default, or choose:
 
 1. Dependency set (full/core/optional/none)
 2. Where the model comes from: automatic Ollama download, your existing GGUF,
-   a model already loaded in LM Studio/llama.cpp, or another Ollama model
+   a model already loaded in LM Studio/llama.cpp, or another Ollama model —
+   plus which `models/` folder to scan at startup and an optional preferred
+   model file
 3. Fast / balanced / quality / custom performance settings
 4. Ask-before-acting or auto-approve ordinary actions
 5. Browser front end, workspace folder, port, theme and opening page
@@ -182,7 +212,10 @@ The front end has four pages:
 - **APIs** — interactive local APIs for coding, mathematics and utilities,
   plus an endpoint catalogue and generic API tester.
 - **Preferences** — the same model/backend/performance/safety/workspace/theme
-  preferences asked by the installer, saved for both CLI and front end.
+  preferences asked by the installer, saved for both CLI and front end. Its
+  **Model file from `models/`** dropdown lists every discovered model file,
+  lets you select one immediately, and includes a **Rescan models folder**
+  button.
 
 The first launch creates `~/MilelikWorkspace` (or your chosen folder) with
 small Python/JavaScript examples. Workspace paths cannot escape that folder.
@@ -280,7 +313,7 @@ Interactive chat (`milelik -i`) — keeps context between tasks. Inside it:
 | Command | What it does |
 |---|---|
 | `/model Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M` | switch model (any of its names work) |
-| `/models` | list models on the current backend |
+| `/models` | list model files in `models/` and models on the current backend |
 | `/yolo on` / `/yolo off` | auto-approve ordinary commands |
 | `/info` | system info |
 | `/clear` | forget the conversation |
@@ -293,6 +326,11 @@ Useful flags: `milelik --help` for all of them.
 milelik --gui                   # browser front end + workspace + local APIs
 milelik --gui --web-port 9876 --workspace-dir ~/Projects
 milelik --check                 # diagnose Ollama/LM Studio/llama.cpp, model, network
+milelik --list-models           # read and list all model files in models/
+milelik --choose-model -i        # choose a model file at startup
+milelik --model-file Other-Model.gguf "..."
+milelik --models-dir ~/AI/models --list-models
+milelik --no-model-scan "..."    # use only the configured/server model
 milelik --model Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M "..."
 milelik --backend openai --host http://127.0.0.1:1234 "..."   # force LM Studio
 milelik --backend ollama "..."   # force Ollama
@@ -305,11 +343,13 @@ milelik --max-steps 20 "..."    # allow longer, multi-step tasks
 Settings live in `~/.config/milelik/config.json`. The installer wizard creates
 them, the front end's **Preferences** page edits them, and
 `milelik --init-config` can recreate defaults. They include `model`,
-`backend`, `host`, `ctx`, `max_steps`, `cmd_timeout`, `auto`, `workspace`,
-`web_host`, `web_port`, `open_browser`, `frontend_enabled`, `ui_theme` and
-`ui_default_view`. Environment variables `MILELIK_MODEL`, `MILELIK_BACKEND`,
-`MILELIK_HOST`, `MILELIK_WORKSPACE`, `MILELIK_WEB_HOST`, `MILELIK_WEB_PORT`,
-`OLLAMA_HOST`, `OPENAI_BASE_URL` and `MILELIK_API_KEY` also work.
+`backend`, `host`, `models_dir`, `model_file`, `model_discovery`, `ctx`,
+`max_steps`, `cmd_timeout`, `auto`, `workspace`, `web_host`, `web_port`,
+`open_browser`, `frontend_enabled`, `ui_theme` and `ui_default_view`.
+Environment variables `MILELIK_MODEL`, `MILELIK_BACKEND`, `MILELIK_HOST`,
+`MILELIK_MODELS_DIR`, `MILELIK_MODEL_FILE`, `MILELIK_WORKSPACE`,
+`MILELIK_WEB_HOST`, `MILELIK_WEB_PORT`, `OLLAMA_HOST`, `OPENAI_BASE_URL` and
+`MILELIK_API_KEY` also work.
 
 ## ⚡ Making it fast
 
@@ -406,7 +446,9 @@ Python dependencies are deliberately empty (`requirements.txt` and
 `pyproject.toml` declare none). System dependencies are version-controlled
 as apt manifests in `dependencies/`; `install-dependencies.sh` installs or
 checks them, and `install.sh` copies the manifests, dependency installer,
-`milelik_web.py` and `frontend/` beside the installed `milelik.py`. Apt
+`milelik_web.py`, `frontend/` and a preserved `models/` folder beside the
+installed `milelik.py`. Repository model files are hard-linked/symlinked into
+the installed `models/` folder when needed instead of being copied again. Apt
 supplies the signed distribution binaries and transitive libraries for the
 user's Mint release, while the preference wizard plus Ollama/model bootstrap
 logic remain in `install.sh` and `setup-model.sh`. The maths evaluator parses
@@ -420,6 +462,8 @@ run without GitHub/model API tokens in their environment.
 | "No local model server is reachable" | `milelik --check` probes Ollama (11434), LM Studio (1234) and llama.cpp (8080) and shows which is up and where the model was found. Start one: `ollama serve`, LM Studio's server, or `llama-server …`. |
 | Model not found in Ollama | `./setup-model.sh --download`, or `ollama pull huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M`. Passing `--model Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M` is fine — the name is translated. |
 | Model not found in LM Studio | Actually load the GGUF in LM Studio (not just download it) and start the server, then `milelik --check`. Or pass the exact id LM Studio shows via `--model`. |
+| My model file is not listed | Run `milelik --list-models` and check the folders it prints. Put the file in the repository `models/`, the installed `~/.local/share/milelik/models/`, `./models/` where you launch Milelik, or pass `--models-dir /path/to/models`. Incomplete downloads ending `.part` are ignored. |
+| A file in `models/` says “unsupported” | Milelik's Ollama/LM Studio/llama.cpp path runs GGUF files. Convert SafeTensors/PyTorch weights to GGUF first, and keep all shards of a split GGUF together. |
 | It imported my GGUF but talks nonsense / never uses tools | You imported it without a template (`ollama create` with a bare `FROM`). Re-import with `./setup-model.sh /path/to/model.gguf` — it applies [`Modelfile.qwen2.5-coder-abliterated`](Modelfile.qwen2.5-coder-abliterated) (ChatML + `<tool_call>` format + stop tokens). |
 | Model describes commands instead of running them | Usually a template problem (above), or the server rejected native tools. Milelik already falls back to text `<tool_call>` calls; with llama.cpp make sure you started `llama-server` with `--jinja`. |
 | Very slow answers | Smaller context (`--ctx 4096`), close other heavy apps, or use a smaller model (`ollama pull qwen3:4b`). First reply after idle includes model load time. |
@@ -437,7 +481,7 @@ run without GitHub/model API tokens in their environment.
 
 ## 🧪 Tests
 
-64 tests, no model or internet required (fake Ollama, fake LM Studio/
+70 tests, no model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
 LibreOffice binaries, the real front-end HTTP server on an ephemeral port,
 a scripted installer-wizard run, and a real temporary Git repo are used):

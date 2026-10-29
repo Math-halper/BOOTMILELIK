@@ -27,6 +27,9 @@ GGUF="${GGUF:-}"
 MODEL_SOURCE="${MODEL_SOURCE:-auto}"
 BACKEND="${BACKEND:-auto}"
 MODEL_HOST="${MODEL_HOST:-${HOST:-}}"
+MODELS_DIR="${MODELS_DIR:-}"
+MODEL_FILE="${MODEL_FILE:-}"
+MODEL_DISCOVERY="${MODEL_DISCOVERY:-1}"
 DEPENDENCY_MODE="${DEPENDENCY_MODE:-full}"
 
 PERFORMANCE_PROFILE="${PERFORMANCE_PROFILE:-balanced}"
@@ -74,6 +77,10 @@ Interactive mode:
 Model options:
   --model MODEL            Ollama model or LM Studio/llama.cpp model id
   --gguf PATH              Import an existing GGUF into Ollama
+  --models-dir DIR         Folder Milelik reads for AI model files at startup
+  --model-file SELECTOR    Preferred model file/path/id inside models/
+  --model-scan/--no-model-scan
+                           Read models/ at startup (default: yes)
   --backend BACKEND        auto, ollama or openai
   --host URL               Model server URL (for LM Studio/llama.cpp)
 
@@ -125,6 +132,10 @@ while [ "$#" -gt 0 ]; do
         --skip-check) SKIP_CHECK=1 ;;
         --model) need_value "$@"; MODEL="$2"; MODEL_WAS_SET=1; shift ;;
         --gguf) need_value "$@"; GGUF="$2"; MODEL_SOURCE="gguf"; shift ;;
+        --models-dir) need_value "$@"; MODELS_DIR="$2"; shift ;;
+        --model-file) need_value "$@"; MODEL_FILE="$2"; shift ;;
+        --model-scan) MODEL_DISCOVERY=1 ;;
+        --no-model-scan) MODEL_DISCOVERY=0 ;;
         --backend) need_value "$@"; BACKEND="$2"; shift ;;
         --host) need_value "$@"; MODEL_HOST="$2"; shift ;;
         --dependency-mode) need_value "$@"; DEPENDENCY_MODE="$2"; shift ;;
@@ -152,6 +163,7 @@ OPEN_BROWSER="$(bool_value "$OPEN_BROWSER")"
 AUTO_APPROVE="$(bool_value "$AUTO_APPROVE")"
 GITHUB_LOGIN="$(bool_value "$GITHUB_LOGIN")"
 SKIP_CHECK="$(bool_value "$SKIP_CHECK")"
+MODEL_DISCOVERY="$(bool_value "$MODEL_DISCOVERY")"
 
 if [ -n "$GGUF" ] && [ "$MODEL_SOURCE" = "auto" ]; then
     MODEL_SOURCE="gguf"
@@ -284,6 +296,12 @@ print_summary() {
     echo "  Model source:     $MODEL_SOURCE"
     echo "  Model:            $MODEL"
     [ -n "$GGUF" ] && echo "  GGUF:             $GGUF"
+    if [ "$MODEL_DISCOVERY" = "1" ]; then
+        echo "  Models folder:    ${MODELS_DIR:-Milelik models/ (auto-detected)}"
+        echo "  Preferred file:   ${MODEL_FILE:-automatic / ask at startup}"
+    else
+        echo "  Models folder:    not scanned at startup"
+    fi
     echo "  Backend:          $BACKEND"
     [ -n "$MODEL_HOST" ] && echo "  Model server:     $MODEL_HOST"
     echo "  Performance:      $PERFORMANCE_PROFILE (ctx $CTX, $MAX_STEPS steps, ${CMD_TIMEOUT}s commands)"
@@ -369,6 +387,28 @@ run_setup_wizard() {
             BACKEND="auto"
             ;;
     esac
+
+    ask_yes_no MODEL_DISCOVERY "Should Milelik read all AI model files in its models/ folder at startup and choose from them?" "$MODEL_DISCOVERY"
+    if [ "$MODEL_DISCOVERY" = "1" ]; then
+        local models_location="installed"
+        if [ "$MODELS_DIR" = "$SCRIPT_DIR/models" ]; then
+            models_location="repository"
+        elif [ -n "$MODELS_DIR" ]; then
+            models_location="custom"
+        fi
+        ask_choice models_location "Which models folder should Milelik read?" "$models_location" \
+            "installed|Installed Milelik models folder (~/.local/share/milelik/models)" \
+            "repository|This repository's models folder ($SCRIPT_DIR/models)" \
+            "custom|Another folder"
+        case "$models_location" in
+            installed) MODELS_DIR="" ;;
+            repository) MODELS_DIR="$SCRIPT_DIR/models" ;;
+            custom) ask_text MODELS_DIR "Folder containing your AI model files:" "${MODELS_DIR:-$HOME/models}" ;;
+        esac
+        if [ "$MODEL_SOURCE" != "gguf" ]; then
+            ask_text MODEL_FILE "Preferred model filename/path inside models/ (blank = Milelik chooses automatically):" "$MODEL_FILE"
+        fi
+    fi
 
     echo
     echo "Step 3 of 7 — speed versus quality"
@@ -468,6 +508,11 @@ if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || [ "$WEB_PORT" -lt 1 ] || [ "$WEB_PORT" -gt
     exit 2
 fi
 [ -n "$GGUF" ] && GGUF="$(expand_path "$GGUF")"
+[ -n "$MODELS_DIR" ] && MODELS_DIR="$(expand_path "$MODELS_DIR")"
+case "$MODEL_FILE" in
+    */*|"~"|"~"/*) MODEL_FILE="$(expand_path "$MODEL_FILE")" ;;
+esac
+[ -z "$MODEL_FILE" ] && [ -n "$GGUF" ] && MODEL_FILE="$GGUF"
 WORKSPACE_DIR="$(expand_path "$WORKSPACE_DIR")"
 
 # --- 1. System dependencies declared in this repository ----------------------
@@ -543,11 +588,12 @@ PY
     GGUF_CANDIDATE="${GGUF:-}"
     if [ -z "$GGUF_CANDIDATE" ] && { [ "$MODEL_SOURCE" = "gguf" ] || \
          { [ "$MODEL_SOURCE" = "auto" ] && [ "$MODEL_WAS_SET" = "0" ]; }; }; then
-        for d in "$SCRIPT_DIR" "$PWD" "$HOME/Downloads" "$HOME/models" \
-                 "$HOME/Models" "$HOME/.lmstudio/models" \
+        for d in "$MODELS_DIR" "$SCRIPT_DIR/models" "$APP_DIR/models" \
+                 "$PWD/models" "$SCRIPT_DIR" "$PWD" "$HOME/Downloads" \
+                 "$HOME/models" "$HOME/Models" "$HOME/.lmstudio/models" \
                  "$HOME/.cache/lm-studio/models"; do
             [ -d "$d" ] || continue
-            GGUF_CANDIDATE="$(find "$d" -maxdepth 6 -type f \
+            GGUF_CANDIDATE="$(find "$d" -maxdepth 6 \( -type f -o -type l \) \
                 -iname '*qwen2.5-coder*7b*abliterat*q4_k_m*.gguf' -print -quit \
                 2>/dev/null || true)"
             [ -n "$GGUF_CANDIDATE" ] && break
@@ -555,6 +601,7 @@ PY
     fi
 
     if [ -n "$GGUF_CANDIDATE" ] && [ -f "$GGUF_CANDIDATE" ]; then
+        [ -z "$MODEL_FILE" ] && MODEL_FILE="$GGUF_CANDIDATE"
         echo "Found your GGUF: $GGUF_CANDIDATE"
         echo "Importing it (no download)…"
         "$SCRIPT_DIR/setup-model.sh" "$GGUF_CANDIDATE"
@@ -598,6 +645,34 @@ rm -rf "$APP_DIR/frontend"
 if [ "$FRONTEND_ENABLED" = "1" ]; then
     cp -a "$SCRIPT_DIR/frontend" "$APP_DIR/frontend"
 fi
+
+# Milelik's installed models/ folder. Never delete this folder during an
+# upgrade: it may contain the user's multi-gigabyte model files. Repository
+# model files are hard-linked (or symlinked) rather than copied, to avoid
+# duplicating gigabytes.
+mkdir -p "$APP_DIR/models"
+for extra in README.md .gitkeep; do
+    if [ -f "$SCRIPT_DIR/models/$extra" ]; then
+        install -m 0644 "$SCRIPT_DIR/models/$extra" "$APP_DIR/models/$extra"
+    fi
+done
+if [ -d "$SCRIPT_DIR/models" ]; then
+    while IFS= read -r -d '' source_model; do
+        relative_model="${source_model#$SCRIPT_DIR/models/}"
+        installed_model="$APP_DIR/models/$relative_model"
+        if [ -e "$installed_model" ] || [ -L "$installed_model" ]; then
+            continue
+        fi
+        mkdir -p "$(dirname "$installed_model")"
+        ln "$source_model" "$installed_model" 2>/dev/null || \
+            ln -s "$source_model" "$installed_model" 2>/dev/null || \
+            cp -a "$source_model" "$installed_model"
+    done < <(find "$SCRIPT_DIR/models" \( -type f -o -type l \) \
+        \( -iname '*.gguf' -o -iname '*.ggml' -o -iname '*.bin' \
+           -o -iname '*.safetensors' -o -iname '*.onnx' \
+           -o -iname '*.pt' -o -iname '*.pth' \) -print0 2>/dev/null)
+fi
+
 for extra in requirements.txt pyproject.toml; do
     if [ -f "$SCRIPT_DIR/$extra" ]; then
         install -m 0644 "$SCRIPT_DIR/$extra" "$APP_DIR/$extra"
@@ -640,6 +715,9 @@ esac
 MILELIK_INSTALL_MODEL="$MODEL" \
 MILELIK_INSTALL_BACKEND="$BACKEND" \
 MILELIK_INSTALL_HOST="$MODEL_HOST" \
+MILELIK_INSTALL_MODELS_DIR="$MODELS_DIR" \
+MILELIK_INSTALL_MODEL_FILE="$MODEL_FILE" \
+MILELIK_INSTALL_MODEL_DISCOVERY="$MODEL_DISCOVERY" \
 MILELIK_INSTALL_MODEL_SOURCE="$MODEL_SOURCE" \
 MILELIK_INSTALL_DEPENDENCY_MODE="$DEPENDENCY_MODE" \
 MILELIK_INSTALL_PERFORMANCE_PROFILE="$PERFORMANCE_PROFILE" \
@@ -682,6 +760,9 @@ cfg.update({
     "model": env("MILELIK_INSTALL_MODEL"),
     "backend": env("MILELIK_INSTALL_BACKEND", "auto"),
     "host": env("MILELIK_INSTALL_HOST"),
+    "models_dir": env("MILELIK_INSTALL_MODELS_DIR"),
+    "model_file": env("MILELIK_INSTALL_MODEL_FILE"),
+    "model_discovery": boolean("MILELIK_INSTALL_MODEL_DISCOVERY"),
     "model_source": env("MILELIK_INSTALL_MODEL_SOURCE", "auto"),
     "dependency_mode": env("MILELIK_INSTALL_DEPENDENCY_MODE", "full"),
     "performance_profile": env("MILELIK_INSTALL_PERFORMANCE_PROFILE", "balanced"),

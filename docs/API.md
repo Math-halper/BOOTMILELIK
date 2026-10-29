@@ -45,8 +45,9 @@ playground for everything below.
 | `POST` | `/api/tools/run` | Call one Milelik tool directly |
 | `GET` | `/api/approvals` | Pending browser approvals |
 | `POST` | `/api/approvals/{id}/decide` | Approve/deny a pending action |
-| `GET` | `/api/models` | Models reported by the selected local server |
-| `GET` | `/api/status` | Model/server/workspace/helper status |
+| `GET` | `/api/models` | Backend models plus every AI model file discovered in `models/` |
+| `POST` | `/api/models/select` | Choose a local model file (or clear the choice) |
+| `GET` | `/api/status` | Model/server/workspace/helper status, including the `models/` inventory |
 | `GET` | `/api/system` | Structured + text system information |
 | `GET`/`POST` | `/api/settings` | Read or save Milelik preferences |
 
@@ -61,6 +62,46 @@ curl -H "X-Milelik-Token: TOKEN" -H "Content-Type: application/json" \
   -d '{"tool":"github_account","arguments":{"action":"auth_status"}}' \
   http://127.0.0.1:8765/api/tools/run
 ```
+
+### Local model files
+
+`GET /api/models` returns the selected backend's server models in `models`,
+and the startup `models/` inventory in `local_models`:
+
+```json
+{
+  "backend": "ollama",
+  "models": ["milelik-coder:7b"],
+  "local_models": {
+    "directories": ["/home/you/.local/share/milelik/models"],
+    "runnable_count": 1,
+    "selected": {
+      "name": "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf",
+      "supported": true,
+      "ollama_name": "milelik-coder:7b"
+    },
+    "files": []
+  }
+}
+```
+
+Choose a discovered file by id, path, filename, stem or generated Ollama
+name. Unsupported formats and incomplete split GGUFs are rejected:
+
+```bash
+curl -H "X-Milelik-Token: TOKEN" -H "Content-Type: application/json" \
+  -d '{"model_file":"Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"}' \
+  http://127.0.0.1:8765/api/models/select
+
+# Use the configured/server model again:
+curl -H "X-Milelik-Token: TOKEN" -H "Content-Type: application/json" \
+  -d '{"model_file":""}' http://127.0.0.1:8765/api/models/select
+```
+
+The same preference can be saved with `POST /api/settings` using
+`models_dir`, `model_file` and `model_discovery`. Selecting a GGUF resets the
+web agent; on the next chat, Milelik imports it into Ollama first if Ollama is
+the selected backend and that import does not exist yet.
 
 ## Workspace and code runner
 

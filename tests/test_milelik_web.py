@@ -70,7 +70,7 @@ class TestCoreWebHooks(unittest.TestCase):
         cfg = core.default_config()
         for key in ("workspace", "web_host", "web_port", "open_browser",
                     "frontend_enabled", "ui_theme", "ui_default_view",
-                    "cmd_timeout"):
+                    "cmd_timeout", "models_dir", "model_file", "model_discovery"):
             self.assertIn(key, cfg)
         self.assertEqual(cfg["web_port"], 8765)
         self.assertFalse(cfg["auto"])
@@ -291,6 +291,60 @@ class TestMilelikWebServer(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("backend", error["error"])
 
+    def test_local_model_files_are_listed_and_selectable(self):
+        models_dir = Path(self.tmp.name) / "models"
+        models_dir.mkdir()
+        target = models_dir / core.TARGET_GGUF_FILENAME
+        other = models_dir / "Other-Model.gguf"
+        target.write_bytes(b"GGUFtarget")
+        other.write_bytes(b"GGUFother")
+        (models_dir / "weights.safetensors").write_bytes(b"123")
+        self.server.state.models_dir_override = str(models_dir)
+        self.server.state.refresh_local_models()
+
+        status, models, _ = self.request("/api/models")
+        self.assertEqual(status, 200, models)
+        local = models["local_models"]
+        self.assertIn(str(models_dir.resolve()), local["directories"])
+        self.assertEqual(local["runnable_count"], 2)
+        self.assertEqual({f["name"] for f in local["files"]}, {
+            target.name, other.name, "weights.safetensors"})
+
+        status, selected, _ = self.request(
+            "/api/models/select", "POST", {"model_file": other.name})
+        self.assertEqual(status, 200, selected)
+        self.assertEqual(selected["local_models"]["selected"]["name"], other.name)
+        self.assertEqual(selected["settings"]["model_file"], str(other.resolve()))
+        self.assertEqual(selected["settings"]["model"], other.stem)
+        saved = json.loads((Path(self.tmp.name) / "config" / "milelik" /
+                            "config.json").read_text())
+        self.assertEqual(saved["model_file"], str(other.resolve()))
+
+        status, status_data, _ = self.request("/api/status")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            status_data["model"]["selected_model_file"]["name"], other.name)
+
+        status, unsupported, _ = self.request(
+            "/api/models/select", "POST", {"model_file": "weights.safetensors"})
+        self.assertEqual(status, 400)
+        self.assertIn("not runnable", unsupported["error"])
+
+        status, cleared, _ = self.request(
+            "/api/models/select", "POST", {"model_file": ""})
+        self.assertEqual(status, 200)
+        self.assertIsNone(cleared["local_models"]["selected"])
+
+        status, settings, _ = self.request("/api/settings", "POST", {
+            "models_dir": str(models_dir),
+            "model_file": target.name,
+            "model_discovery": True,
+            "backend": "ollama",
+        })
+        self.assertEqual(status, 200, settings)
+        self.assertEqual(settings["settings"]["model"], core.LOCAL_IMPORTED_MODEL)
+        self.assertEqual(settings["settings"]["model_file"], str(target.resolve()))
+
     def test_chat_uses_agent_and_records_history(self):
         fake = FakeAgent()
         self.server.state._agent = fake
@@ -361,7 +415,9 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
         css = (ROOT / "frontend" / "styles.css").read_text()
         desktop = (ROOT / "milelik-workspace.desktop").read_text()
         for text in ("Workspace — code on this device", "/api/math/evaluate",
-                     "/api/code/run", "/api/workspace/clone", "X-Milelik-Token"):
+                     "/api/code/run", "/api/workspace/clone", "X-Milelik-Token",
+                     "set-model-file", "/api/models/select",
+                     "Read models/ at startup"):
             self.assertTrue(text in html or text in js, text)
         self.assertIn(".workspace-layout", css)
         self.assertIn("Exec=milelik --gui", desktop)
@@ -389,12 +445,13 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             for path in bindir.iterdir():
                 path.chmod(0o755)
 
-            # Full deps; existing LM Studio; fast; ask-first; front end in the
-            # default workspace on port 9876; light/workspace; no GitHub
-            # login; launch nothing; proceed.
+            # Full deps; existing LM Studio; scan the installed models/
+            # folder with no fixed preferred file; fast; ask-first; front
+            # end in the default workspace on port 9876; light/workspace;
+            # no GitHub login; launch nothing; proceed.
             answers = "\n".join([
-                "1", "3", "1", "", "2", "1", "", "", "", "9876",
-                "n", "3", "2", "n", "3", "",
+                "1", "3", "1", "", "", "1", "", "2", "1", "", "", "",
+                "9876", "n", "3", "2", "n", "3", "",
             ]) + "\n"
             env = dict(os.environ)
             env.update({
@@ -417,6 +474,10 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             self.assertEqual(config["web_port"], 9876)
             self.assertEqual(config["ui_theme"], "light")
             self.assertEqual(config["ui_default_view"], "workspace")
+            self.assertTrue(config["model_discovery"])
+            self.assertEqual(config["models_dir"], "")
+            self.assertEqual(config["model_file"], "")
+            self.assertTrue((home / ".local" / "share" / "milelik" / "models" / "README.md").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "app.js").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-web").is_file())
             self.assertTrue((home / ".local" / "share" / "applications" / "milelik-workspace.desktop").is_file())

@@ -5,3 +5,22 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# Local model weights dropped into models/ are data, not source code. They
+# are usually far too large for ordinary Git; track only the folder docs.
+models/*.gguf
+models/**/*.gguf
+models/*.ggml
+models/**/*.ggml
+models/*.bin
+models/**/*.bin
+models/*.safetensors
+models/**/*.safetensors
+models/*.onnx
+models/**/*.onnx
+models/*.pt
+models/**/*.pt
+models/*.pth
+models/**/*.pth
+!models/README.md
+!models/.gitkeep

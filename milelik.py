@@ -26,6 +26,7 @@ import argparse
 import ast
 import datetime
 import getpass
+import hashlib
 import json
 import os
 import platform
@@ -33,6 +34,7 @@ import re
 import shlex
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -44,7 +46,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 # The model Milelik is tuned for out of the box. Note the Ollama library
 # spells the repo "abliterate", while the Hugging Face GGUF file uses
@@ -63,6 +65,16 @@ DEFAULT_CMD_TIMEOUT = 60
 DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 8765
 DEFAULT_WORKSPACE = "~/MilelikWorkspace"
+MODELS_DIR_NAME = "models"
+MODEL_FILE_EXTENSIONS = {
+    ".gguf": ("GGUF", True),
+    ".ggml": ("GGML (legacy)", False),
+    ".safetensors": ("SafeTensors", False),
+    ".onnx": ("ONNX", False),
+    ".pt": ("PyTorch", False),
+    ".pth": ("PyTorch", False),
+    ".bin": ("Binary model weights", False),
+}
 MAX_TOOL_OUTPUT = 8000          # chars of tool output fed back to the model
 MAX_DOWNLOAD_BYTES = 2_000_000  # cap web downloads at ~2 MB
 USER_AGENT = f"Milelik/{__version__} (+https://github.com/Math-halper/BOOTMILELIK)"
@@ -261,6 +273,478 @@ def clean_model_text(text: str) -> str:
 def looks_like_gguf_path(value: str) -> bool:
     return bool(value) and str(value).strip().lower().endswith(".gguf")
 
+# ---------------------------------------------------------------------------
+# Local model files: Milelik's models/ folders
+# ---------------------------------------------------------------------------
+# At startup Milelik inventories the repository/installed models/ folders.
+# The inventory is deliberately JSON-friendly so the web front end can show
+# exactly the same choices as the terminal.
+
+def _format_file_size(size: int) -> str:
+    value = float(max(0, int(size or 0)))
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TiB"
+
+
+def model_directories(models_dir=None, cfg: dict | None = None) -> list[Path]:
+    """Directories scanned for local model files, in priority order."""
+    cfg = load_config() if cfg is None else cfg
+    explicit = models_dir
+    if explicit is None:
+        explicit = os.environ.get("MILELIK_MODELS_DIR") or cfg.get("models_dir") or ""
+
+    raw_dirs: list[object] = []
+    if isinstance(explicit, (list, tuple)):
+        raw_dirs.extend(explicit)
+    elif explicit:
+        raw_dirs.extend(str(explicit).split(os.pathsep))
+
+    app_dir = Path(__file__).resolve().parent
+    raw_dirs.extend([app_dir / MODELS_DIR_NAME, Path.cwd() / MODELS_DIR_NAME])
+
+    out: list[Path] = []
+    seen: set[str] = set()
+    for raw in raw_dirs:
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            path = Path(os.path.expanduser(str(raw))).resolve()
+        except (OSError, RuntimeError):
+            continue
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def _split_gguf_info(path: Path):
+    match = re.match(r"^(.*)-(\d{5})-of-(\d{5})$", path.stem)
+    if not match:
+        return None
+    return match.group(1), int(match.group(2)), int(match.group(3))
+
+
+def ollama_name_for_model_file(path, size: int | None = None) -> str:
+    """A stable, unique Ollama name for an imported local model file."""
+    p = Path(path)
+    if is_target_model(p.name):
+        return LOCAL_IMPORTED_MODEL
+    stem = p.stem
+    split = _split_gguf_info(p)
+    if split:
+        stem = split[0]
+    slug = re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-") or "model"
+    slug = slug[:56].strip("-") or "model"
+    if size is None:
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+    digest = hashlib.sha256(f"{p.name.lower()}|{int(size)}".encode()).hexdigest()[:8]
+    return f"milelik-{slug}-{digest}:latest"
+
+
+def read_gguf_metadata(path) -> dict:
+    """Read a small allow-list of scalar GGUF header metadata safely.
+
+    This only reads the header, never the tensor data. Any malformed or
+    surprising file simply returns {}, leaving filename-based discovery to
+    work as before.
+    """
+    scalar_formats = {
+        0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i",
+        6: "<f", 7: "<B", 10: "<Q", 11: "<q", 12: "<d",
+    }
+    keep = {
+        "general.architecture", "general.name", "general.file_type",
+        "general.size_label", "general.quantization_version",
+        "general.parameter_count",
+    }
+    try:
+        with open(path, "rb") as fh:
+            def read(fmt):
+                size = struct.calcsize(fmt)
+                data = fh.read(size)
+                if len(data) != size:
+                    raise EOFError
+                return struct.unpack(fmt, data)[0]
+
+            if fh.read(4) != b"GGUF":
+                return {}
+            version = read("<I")
+            if version == 1:
+                _tensor_count = read("<I")
+                metadata_count = read("<I")
+                length_fmt = "<I"
+            elif version in (2, 3):
+                _tensor_count = read("<Q")
+                metadata_count = read("<Q")
+                length_fmt = "<Q"
+            else:
+                return {"gguf_version": version, "metadata": {}}
+            if metadata_count > 4096:
+                return {"gguf_version": version, "metadata": {}}
+
+            def read_string():
+                length = read(length_fmt)
+                if length > 1_000_000:
+                    raise ValueError("GGUF string is implausibly large")
+                data = fh.read(length)
+                if len(data) != length:
+                    raise EOFError
+                return data.decode("utf-8", errors="replace")
+
+            def read_value(value_type, collect=True, depth=0):
+                if value_type == 8:  # string
+                    return read_string()
+                if value_type == 9:  # array
+                    if depth > 2:
+                        raise ValueError("GGUF metadata is nested too deeply")
+                    element_type = read("<I")
+                    count = read(length_fmt)
+                    if count > 1_000_000:
+                        raise ValueError("GGUF metadata array is implausibly large")
+                    values = []
+                    for i in range(count):
+                        value = read_value(element_type, collect and i < 20, depth + 1)
+                        if collect and i < 20:
+                            values.append(value)
+                    return values
+                fmt = scalar_formats.get(value_type)
+                if fmt is None:
+                    raise ValueError(f"unknown GGUF metadata type {value_type}")
+                value = read(fmt)
+                return bool(value) if value_type == 7 else value
+
+            metadata = {}
+            for _ in range(metadata_count):
+                key = read_string()
+                value_type = read("<I")
+                value = read_value(value_type, collect=key in keep)
+                if key in keep and isinstance(value, (str, int, float, bool)):
+                    metadata[key] = value
+                # The fields Milelik actually needs for display/selection
+                # normally appear before large tokenizer arrays. Stop early
+                # when both are known so startup stays fast.
+                if {"general.architecture", "general.name"} <= metadata.keys():
+                    break
+            return {"gguf_version": version, "metadata": metadata}
+    except (EOFError, OSError, ValueError, struct.error):
+        return {}
+
+
+def _model_file_record(path: Path, root: Path, parts=None,
+                       missing_first_shard: bool = False) -> dict:
+    parts = list(parts or [path])
+    extension = path.suffix.lower()
+    format_label, format_runnable = MODEL_FILE_EXTENSIONS.get(
+        extension, (extension.lstrip(".").upper() or "Unknown", False))
+    errors: list[str] = []
+    size = 0
+    modified = 0.0
+    for part in parts:
+        try:
+            stat = part.stat()
+            size += stat.st_size
+            modified = max(modified, stat.st_mtime)
+        except OSError:
+            errors.append(f"Cannot read {part.name}")
+
+    header: dict = {}
+    valid_gguf = False
+    if extension in (".gguf", ".bin"):
+        try:
+            with open(path, "rb") as fh:
+                valid_gguf = fh.read(4) == b"GGUF"
+        except OSError:
+            valid_gguf = False
+        if valid_gguf:
+            header = read_gguf_metadata(path)
+            if extension == ".bin":
+                format_label = "GGUF (.bin)"
+        elif extension == ".gguf":
+            errors.append("Not a valid GGUF file header")
+
+    try:
+        physical = path.resolve()
+    except (OSError, RuntimeError):
+        physical = path.absolute()
+    try:
+        relative = path.absolute().relative_to(root.absolute()).as_posix()
+    except ValueError:
+        relative = path.name
+
+    split = _split_gguf_info(path)
+    expected_parts = split[2] if split else 1
+    if missing_first_shard:
+        errors.append("The first shard of this split GGUF is missing")
+    elif len(parts) != expected_parts:
+        errors.append(f"Split GGUF is incomplete ({len(parts)}/{expected_parts} shards)")
+
+    runnable_container = format_runnable or (extension == ".bin" and valid_gguf)
+    supported = bool(runnable_container and valid_gguf and not errors)
+    metadata = header.get("metadata", {}) if isinstance(header, dict) else {}
+    display_name = str(metadata.get("general.name") or path.stem)
+    identifier = hashlib.sha256(
+        f"{physical}|{size}".encode("utf-8", errors="replace")).hexdigest()[:16]
+    return {
+        "id": identifier,
+        "name": path.name,
+        "stem": path.stem,
+        "display_name": display_name,
+        "path": str(physical),
+        "relative_path": relative,
+        "directory": str(root),
+        "extension": extension,
+        "format": format_label,
+        "size_bytes": size,
+        "size_human": _format_file_size(size),
+        "modified": datetime.datetime.fromtimestamp(modified).isoformat(timespec="seconds") if modified else None,
+        "supported": supported,
+        "runnable": supported,
+        "reason": "; ".join(errors) if errors else (
+            "" if runnable_container else
+            "Milelik's Ollama/LM Studio/llama.cpp runtimes use GGUF files"),
+        "is_target": is_target_model(path.name),
+        "is_qwen25_coder": is_qwen25_coder(path.name) or (
+            str(metadata.get("general.architecture", "")).lower() == "qwen2"
+            and "coder" in display_name.lower()),
+        "ollama_name": ollama_name_for_model_file(path, size),
+        "architecture": metadata.get("general.architecture"),
+        "gguf_version": header.get("gguf_version") if isinstance(header, dict) else None,
+        "metadata": metadata,
+        "parts": [str(part.resolve()) if part.exists() else str(part) for part in parts],
+        "part_count": len(parts),
+    }
+
+
+def model_file_record_for_path(path) -> dict:
+    """Build a discovery record for one explicit model file path."""
+    p = Path(os.path.expanduser(str(path or "")))
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    parts = [p]
+    missing_first = False
+    split = _split_gguf_info(p)
+    if split:
+        base, part_number, total = split
+        found = []
+        for candidate in p.parent.glob(f"{base}-*-of-{total:05d}.gguf"):
+            info = _split_gguf_info(candidate)
+            if info and info[0] == base and info[2] == total:
+                found.append(candidate)
+        parts = sorted(found, key=lambda item: (_split_gguf_info(item) or ("", 99999, 0))[1])
+        missing_first = part_number != 1 and (not parts or (_split_gguf_info(parts[0]) or ("", 0, 0))[1] != 1)
+        if parts:
+            p = parts[0]
+    return _model_file_record(p, p.parent, parts, missing_first)
+
+
+def discover_model_files(directories=None, cfg: dict | None = None) -> list[dict]:
+    """Recursively inventory every recognised model file in models/ folders."""
+    if directories is None:
+        roots = model_directories(cfg=cfg)
+    elif isinstance(directories, (str, Path)):
+        roots = [Path(os.path.expanduser(str(directories))).resolve()]
+    else:
+        roots = [Path(os.path.expanduser(str(d))).resolve() for d in directories]
+
+    plain: list[tuple[Path, Path]] = []
+    split_groups: dict[tuple[str, str, int], list[tuple[Path, Path]]] = {}
+    ignored_suffixes = (".part", ".partial", ".download", ".tmp", ".aria2")
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for current, dirnames, filenames in os.walk(root):
+            dirnames[:] = sorted(
+                d for d in dirnames if d not in (".git", "__pycache__") and not d.startswith("."))
+            for filename in sorted(filenames, key=str.lower):
+                lower = filename.lower()
+                if filename.startswith(".") or lower.endswith(ignored_suffixes):
+                    continue
+                path = Path(current) / filename
+                if path.suffix.lower() not in MODEL_FILE_EXTENSIONS:
+                    continue
+                try:
+                    if not path.is_file():
+                        continue
+                except OSError:
+                    continue
+                split = _split_gguf_info(path) if path.suffix.lower() == ".gguf" else None
+                if split:
+                    try:
+                        parent_key = str(path.parent.resolve())
+                    except (OSError, RuntimeError):
+                        parent_key = str(path.parent)
+                    key = (parent_key, split[0].lower(), split[2])
+                    split_groups.setdefault(key, []).append((path, root))
+                else:
+                    plain.append((path, root))
+
+    records: list[dict] = []
+    seen_physical: set[str] = set()
+
+    def add(path, root, parts=None, missing_first=False):
+        try:
+            physical_key = str(path.resolve())
+        except (OSError, RuntimeError):
+            physical_key = str(path.absolute())
+        if physical_key in seen_physical:
+            return
+        seen_physical.add(physical_key)
+        records.append(_model_file_record(path, root, parts, missing_first))
+
+    # If the same physical model is visible through both a real path and a
+    # symlink (for example an installed link to the repository file), prefer
+    # the real file's name/path for display and selection.
+    best_plain: dict[str, tuple[tuple[bool, int], Path, Path]] = {}
+    for index, (path, root) in enumerate(plain):
+        try:
+            physical_key = str(path.resolve())
+        except (OSError, RuntimeError):
+            physical_key = str(path.absolute())
+        rank = (path.is_symlink(), index)
+        if physical_key not in best_plain or rank < best_plain[physical_key][0]:
+            best_plain[physical_key] = (rank, path, root)
+    for _rank, path, root in sorted(best_plain.values(), key=lambda item: item[0][1]):
+        add(path, root)
+    for group in split_groups.values():
+        ordered = sorted(
+            group, key=lambda item: (_split_gguf_info(item[0]) or ("", 99999, 0))[1])
+        first_path, first_root = ordered[0]
+        first_info = _split_gguf_info(first_path)
+        add(first_path, first_root, [item[0] for item in ordered],
+            missing_first=not first_info or first_info[1] != 1)
+
+    records.sort(key=lambda r: (
+        0 if r.get("supported") else 1,
+        0 if r.get("is_target") else 1,
+        str(r.get("name", "")).lower(),
+    ))
+    return records
+
+
+def find_model_file(requested: str, records) -> dict | None:
+    """Find a discovered model by id, path, filename, stem or Ollama name."""
+    records = list(records or [])
+    if not requested or not records:
+        return None
+    raw = str(requested).strip()
+    try:
+        requested_path = Path(os.path.expanduser(raw)).resolve()
+    except (OSError, RuntimeError):
+        requested_path = None
+    for record in records:
+        candidates = {
+            str(record.get("id", "")), str(record.get("name", "")),
+            str(record.get("stem", "")), str(record.get("ollama_name", "")),
+            str(record.get("relative_path", "")),
+        }
+        if raw in candidates:
+            return record
+        if requested_path is not None and str(requested_path) == str(record.get("path", "")):
+            return record
+    if is_target_model(raw):
+        for record in records:
+            if record.get("is_target"):
+                return record
+    key = model_key(raw)
+    for record in records:
+        if key and key in {
+            model_key(record.get("name", "")), model_key(record.get("stem", "")),
+            model_key(record.get("ollama_name", "")),
+            model_key(record.get("display_name", "")),
+        }:
+            return record
+    return None
+
+
+def format_model_inventory(records, directories=None) -> str:
+    lines = []
+    if directories:
+        lines.append("Model folders scanned:")
+        lines.extend(f"  • {directory}" for directory in directories)
+    if not records:
+        lines.append("No AI model files found. Put a .gguf file in Milelik's models/ folder.")
+        return "\n".join(lines)
+    lines.append(f"Found {len(records)} model file(s):")
+    for index, record in enumerate(records, 1):
+        state = "ready" if record.get("supported") else "unsupported"
+        detail = f"{record.get('format')} · {record.get('size_human')}"
+        if record.get("part_count", 1) > 1:
+            detail += f" · {record['part_count']} shards"
+        if record.get("reason"):
+            detail += f" · {record['reason']}"
+        lines.append(f"  {index}. {record.get('name')} [{state}] — {detail}")
+        lines.append(f"     {record.get('path')}")
+    return "\n".join(lines)
+
+
+def choose_model_file(records=None, configured_model: str = "",
+                      selected_model_file: str = "", interactive: bool = False,
+                      input_fn=input, print_fn=print,
+                      allow_configured: bool = True,
+                      strict_selected: bool = False) -> dict | None:
+    """Choose one local model file, optionally by asking in the terminal."""
+    records = list(records if records is not None else discover_model_files())
+    explicit = find_model_file(selected_model_file, records)
+    if selected_model_file:
+        p = Path(os.path.expanduser(str(selected_model_file)))
+        if p.is_file():
+            explicit = explicit or model_file_record_for_path(p)
+        elif strict_selected and not explicit:
+            return None
+    if explicit and not interactive:
+        return explicit
+
+    configured = find_model_file(configured_model, records)
+    supported = [record for record in records if record.get("supported")]
+    if not supported:
+        return explicit or configured
+
+    if interactive and supported:
+        default = explicit if explicit in supported else (
+            configured if configured in supported else supported[0])
+        default_index = supported.index(default) + 1
+        print_fn("\nAI model files in Milelik's models/ folder:")
+        for index, record in enumerate(supported, 1):
+            marker = " [default]" if index == default_index else ""
+            print_fn(f"  {index}. {record['name']} — {record['size_human']}{marker}")
+            print_fn(f"     {record['path']}")
+        unsupported = [r for r in records if not r.get("supported")]
+        if unsupported:
+            print_fn("  Also found but not runnable by Milelik's GGUF backends:")
+            for record in unsupported:
+                print_fn(f"     • {record['name']} ({record.get('format')})")
+        if allow_configured:
+            print_fn("  0. Use the configured/server model instead")
+        while True:
+            try:
+                answer = str(input_fn(
+                    f"Choose a model [1-{len(supported)}] (Enter = {default_index}): "
+                ) or "").strip()
+            except (EOFError, KeyboardInterrupt):
+                return default
+            if not answer:
+                return default
+            if allow_configured and answer == "0":
+                return None
+            if answer.isdigit() and 1 <= int(answer) <= len(supported):
+                return supported[int(answer) - 1]
+            selected = find_model_file(answer, supported)
+            if selected:
+                return selected
+            print_fn("Please choose one of the numbers above.")
+
+    if explicit:
+        return explicit
+    return configured if configured and configured.get("supported") else supported[0]
+
 # The official Ollama ChatML template for Qwen2.5-Coder (with tool support).
 # Importing the raw GGUF *without* this template is the usual reason tool
 # calls come out as plain text / the model talks to itself.
@@ -327,9 +811,40 @@ def build_qwen25_coder_modelfile(from_ref: str = "./" + TARGET_GGUF_FILENAME) ->
             "PARAMETER top_k 20\n"
             "PARAMETER repeat_penalty 1.05\n")
 
+def build_generic_modelfile(from_ref: str) -> str:
+    """A minimal Modelfile that lets Ollama use a GGUF's own chat template."""
+    return ("FROM " + from_ref + "\n\n"
+            "PARAMETER num_ctx 8192\n"
+            "PARAMETER temperature 0.2\n")
+
+
+def build_modelfile_for_gguf(path, from_ref: str) -> str:
+    p = Path(path)
+    header = read_gguf_metadata(p)
+    metadata = header.get("metadata", {}) if isinstance(header, dict) else {}
+    architecture = str(metadata.get("general.architecture") or "").lower()
+    name_text = f"{p.name} {metadata.get('general.name') or ''}"
+    if is_qwen25_coder(name_text) or (architecture == "qwen2"
+                                      and "coder" in model_key(name_text)):
+        return build_qwen25_coder_modelfile(from_ref)
+    return build_generic_modelfile(from_ref)
+
+
+def _gguf_shards(path: Path) -> list[Path]:
+    split = _split_gguf_info(path)
+    if not split:
+        return [path]
+    base, _part, total = split
+    found = []
+    for candidate in path.parent.glob(f"{base}-*-of-{total:05d}.gguf"):
+        info = _split_gguf_info(candidate)
+        if info and info[0] == base and info[2] == total:
+            found.append(candidate)
+    return sorted(found, key=lambda item: (_split_gguf_info(item) or ("", 99999, 0))[1])
+
 def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODEL,
                           runner=None) -> bool:
-    """Import a local GGUF file into Ollama with the right Qwen template."""
+    """Import a local GGUF into Ollama, using Qwen's template only for Qwen."""
     runner = runner or subprocess.run
     path = Path(os.path.expanduser(str(gguf_path or ""))).resolve()
     if not path.is_file():
@@ -351,20 +866,38 @@ def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODE
         err("`ollama` command not found. Run ./install.sh first.")
         return False
 
-    info(f"Importing {c_bold(path.name)} into Ollama as {c_bold(ollama_name)} "
-         f"(with the Qwen2.5-Coder ChatML/tools template)…")
+    shards = _gguf_shards(path)
+    split = _split_gguf_info(path)
+    if split and split[1] != 1:
+        err("Select the first shard (…-00001-of-…) when importing a split GGUF.")
+        return False
+    if split and len(shards) != split[2]:
+        err(f"Split GGUF is incomplete: found {len(shards)} of {split[2]} shards beside {path}.")
+        return False
+
+    modelfile_text_probe = build_modelfile_for_gguf(path, "./model.gguf")
+    is_qwen = "<|im_start|>" in modelfile_text_probe
+    info(f"Importing {c_bold(path.name)} into Ollama as {c_bold(ollama_name)}"
+         + (" (with the Qwen2.5-Coder ChatML/tools template)" if is_qwen else "")
+         + "…")
     with tempfile.TemporaryDirectory(prefix="milelik-model-") as tmp:
         tmpdir = Path(tmp)
-        link = tmpdir / "model.gguf"
-        try:
-            os.symlink(path, link)
-        except OSError:
+        if split:
+            from_ref = "./" + path.name
+            links = [(shard, tmpdir / shard.name) for shard in shards]
+        else:
+            from_ref = "./model.gguf"
+            links = [(path, tmpdir / "model.gguf")]
+        for source, link in links:
             try:
-                os.link(path, link)
+                os.symlink(source, link)
             except OSError:
-                shutil.copy2(path, link)
+                try:
+                    os.link(source, link)
+                except OSError:
+                    shutil.copy2(source, link)
         modelfile = tmpdir / "Modelfile"
-        modelfile.write_text(build_qwen25_coder_modelfile("./model.gguf"),
+        modelfile.write_text(build_modelfile_for_gguf(path, from_ref),
                              encoding="utf-8")
         try:
             proc = runner(["ollama", "create", ollama_name, "-f", str(modelfile)])
@@ -4043,6 +4576,9 @@ def default_config() -> dict:
         "model": DEFAULT_MODEL,
         "backend": "auto",
         "host": "",
+        "models_dir": "",
+        "model_file": "",
+        "model_discovery": True,
         "ctx": DEFAULT_CTX,
         "max_steps": DEFAULT_MAX_STEPS,
         "auto": False,
@@ -4070,6 +4606,20 @@ def update_config(**updates) -> Path:
     p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     return p
 
+
+def save_model_file_preference(record: dict, model: str = "",
+                               models_dir: str = "") -> None:
+    """Remember which file in models/ Milelik selected at startup."""
+    updates = {"model_file": str(record.get("path") or "")}
+    if model:
+        updates["model"] = model
+    if models_dir:
+        updates["models_dir"] = models_dir
+    try:
+        update_config(**updates)
+    except OSError:
+        pass
+
 # ---------------------------------------------------------------------------
 # Interactive mode
 # ---------------------------------------------------------------------------
@@ -4077,7 +4627,7 @@ def update_config(**updates) -> Path:
 HELP_TEXT = """Commands:
   /help              show this help
   /model <name>      switch model (e.g. /model Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M)
-  /models            list locally installed models
+  /models            list model files in models/ and models on the backend
   /yolo on|off       auto-approve ordinary commands (dangerous/sudo still ask)
   /info              system info
   /clear             forget conversation history
@@ -4113,9 +4663,11 @@ def interactive(agent: Agent, client, toolbox: Toolbox):
             print(toolbox.system_info())
             continue
         if low == "/models":
+            print(format_model_inventory(discover_model_files(), model_directories()))
             try:
-                print("\n".join(client.tags())
-                      or f"(no models reported by {client.host})")
+                server_models = client.tags()
+                print("\nBackend models:\n" + ("\n".join(server_models)
+                      or f"(no models reported by {client.host})"))
             except OllamaError as e:
                 err(str(e))
             continue
@@ -4153,7 +4705,8 @@ def interactive(agent: Agent, client, toolbox: Toolbox):
 # --check diagnostics
 # ---------------------------------------------------------------------------
 
-def run_check(client, requested_model: str = "") -> int:
+def run_check(client, requested_model: str = "", local_models=None,
+              local_model_directories=None, selected_local_model=None) -> int:
     ok = True
     print(c_bold("Milelik check"))
     print(f"  Python : {platform.python_version()}")
@@ -4194,6 +4747,24 @@ def run_check(client, requested_model: str = "") -> int:
         if models:
             shown = ", ".join(models[:6]) + ("…" if len(models) > 6 else "")
             print(f"             models: {shown}")
+
+    if local_models is None:
+        local_model_directories = model_directories()
+        local_models = discover_model_files(local_model_directories)
+    local_dirs_text = ", ".join(str(d) for d in (local_model_directories or []))
+    ready_local = [m for m in local_models if m.get("supported")]
+    print(f"  Local models: {len(ready_local)} runnable GGUF(s), "
+          f"{len(local_models) - len(ready_local)} other model file(s)")
+    if local_dirs_text:
+        print(f"             folders: {local_dirs_text}")
+    for record in local_models[:8]:
+        mark = "✔" if record.get("supported") else "•"
+        suffix = " (selected)" if selected_local_model and \
+            record.get("id") == selected_local_model.get("id") else ""
+        print(f"             {mark} {record.get('name')} — "
+              f"{record.get('size_human')}{suffix}")
+    if len(local_models) > 8:
+        print("             … run `milelik --list-models` for the full list")
 
     print(f"  Selected: backend={getattr(client, 'backend', '?')}  "
           f"host={getattr(client, 'host', '?')}  model={getattr(client, 'model', '?')}")
@@ -4285,6 +4856,8 @@ def parse_args(argv=None):
   milelik "open my Documents folder and take a screenshot"
   milelik --gui                  # browser front end + workspace + local APIs
   milelik --interactive
+  milelik --list-models          # models found in Milelik's models/ folder
+  milelik --choose-model -i       # choose a model file, then chat
   milelik --model {TARGET_MODEL_LABEL} "check my disk and memory"
   milelik --backend openai --host http://127.0.0.1:1234 "check my disk"   # LM Studio
   milelik --import-gguf ~/Downloads/{TARGET_GGUF_FILENAME}""")
@@ -4322,6 +4895,19 @@ def parse_args(argv=None):
     p.add_argument("--cmd-timeout", type=int,
                    default=int(cfg.get("cmd_timeout", DEFAULT_CMD_TIMEOUT)),
                    help="Default timeout for shell commands, seconds (default: 60)")
+    p.add_argument("--models-dir", default=os.environ.get(
+        "MILELIK_MODELS_DIR", cfg.get("models_dir") or None),
+                   help="folder searched recursively for local model files "
+                        "(default: Milelik's models/ folder)")
+    p.add_argument("--model-file", default=os.environ.get(
+        "MILELIK_MODEL_FILE", cfg.get("model_file") or None),
+                   help="choose a local model by path, filename, id or Ollama name")
+    p.add_argument("--list-models", action="store_true",
+                   help="read and list all AI model files in models/, then exit")
+    p.add_argument("--choose-model", action="store_true",
+                   help="show the models/ file chooser at startup")
+    p.add_argument("--no-model-scan", action="store_true",
+                   help="do not read the models/ folder at startup")
     p.add_argument("--gui", "--web", "--frontend", dest="gui", action="store_true",
                    help="Start Milelik's browser front end, local workspace and APIs, then exit when stopped")
     p.add_argument("--workspace-dir", "--workspace", dest="workspace_dir",
@@ -4346,15 +4932,26 @@ def parse_args(argv=None):
                    help="Download the selected model with Ollama and exit")
     p.add_argument("--import-gguf", metavar="PATH", default=None,
                    help="Import a local GGUF (e.g. " + TARGET_GGUF_FILENAME + ") into "
-                        "Ollama with the correct Qwen2.5-Coder ChatML/tools template, "
-                        "make it Milelik's default model, and exit")
+                        "Ollama with an appropriate template (Qwen2.5-Coder "
+                        "ChatML/tools for Qwen2.5-Coder files), make it "
+                        "Milelik's default model, and exit")
     p.add_argument("--import-name", default=LOCAL_IMPORTED_MODEL,
                    help=f"Ollama name for --import-gguf (default: {LOCAL_IMPORTED_MODEL})")
     p.add_argument("--init-config", action="store_true", help="Write a default config file and exit")
     p.add_argument("-v", "--verbose", action="store_true", help="Show full tool output")
     p.add_argument("--no-color", action="store_true", help="Disable colours")
     p.add_argument("--version", action="version", version=f"milelik {__version__}")
-    return p.parse_args(argv)
+    parsed = p.parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    parsed.explicit_model = any(
+        arg == "--model" or arg.startswith("--model=") for arg in raw_argv)
+    parsed.explicit_model_file = any(
+        arg == "--model-file" or arg.startswith("--model-file=")
+        for arg in raw_argv)
+    parsed.explicit_models_dir = any(
+        arg == "--models-dir" or arg.startswith("--models-dir=")
+        for arg in raw_argv)
+    return parsed
 
 def launch_frontend(args) -> int:
     """Load the sibling web module and run the local front end.
@@ -4388,6 +4985,8 @@ def launch_frontend(args) -> int:
             workspace=args.workspace_dir,
             open_browser=open_browser,
             core_module=sys.modules[__name__],
+            models_dir=getattr(args, "models_dir", None),
+            model_file=getattr(args, "model_file", None),
         ))
     except KeyboardInterrupt:
         print("\nMilelik front end stopped.")
@@ -4403,6 +5002,76 @@ def main(argv=None) -> int:
         print(f"Wrote {write_default_config()}")
         return 0
 
+    # Startup model-file discovery: read Milelik's models/ folders and pick
+    # the file the user/config asks for (otherwise the target GGUF, then the
+    # first runnable GGUF). --choose-model opens the terminal chooser.
+    startup_cfg = load_config()
+    local_model_directories: list[Path] = []
+    local_models: list[dict] = []
+    selected_local_model = None
+    scan_models = args.list_models or (
+        not args.no_model_scan
+        and (bool(startup_cfg.get("model_discovery", True))
+             or bool(args.model_file)
+             or args.explicit_models_dir))
+    if scan_models:
+        local_model_directories = model_directories(args.models_dir, cfg=startup_cfg)
+        local_models = discover_model_files(local_model_directories, cfg=startup_cfg)
+        if args.list_models:
+            print(format_model_inventory(local_models, local_model_directories))
+            return 0
+
+        selector = args.model if args.explicit_model else (args.model_file or "")
+        selector_is_explicit = bool(
+            args.explicit_model_file or os.environ.get("MILELIK_MODEL_FILE"))
+        show_chooser = bool(args.choose_model or (
+            args.interactive and sys.stdin.isatty()
+            and not args.explicit_model and not args.explicit_model_file
+            and not startup_cfg.get("model_file")
+            and not args.gui and not args.check and not args.pull))
+        selected_local_model = choose_model_file(
+            local_models,
+            configured_model=args.model,
+            selected_model_file=selector,
+            interactive=show_chooser,
+            allow_configured=True,
+            strict_selected=bool(
+                not show_chooser
+                and (args.explicit_model or selector_is_explicit)),
+        )
+        if selector and not selected_local_model and not show_chooser:
+            if selector_is_explicit:
+                err(f"Model file not found in models/: {selector}")
+                print("Run `milelik --list-models` to see the model files Milelik can see.")
+                return 1
+            if not args.explicit_model:
+                jar(f"Saved model file is no longer available; ignoring it: {selector}")
+        if selected_local_model and not selected_local_model.get("supported"):
+            err(f"Selected model file is not runnable: {selected_local_model['path']}")
+            if selected_local_model.get("reason"):
+                print(selected_local_model["reason"])
+            return 1
+        if selected_local_model:
+            inferred = infer_backend_from_host(args.host) if args.host else ""
+            if args.backend == "openai" or inferred == "openai":
+                args.model = selected_local_model["stem"]
+            elif args.backend == "ollama" or inferred == "ollama":
+                args.model = selected_local_model["ollama_name"]
+            else:
+                args.model = selected_local_model["stem"]
+            args.model_file = selected_local_model["path"]
+            if show_chooser or selector_is_explicit:
+                save_model_file_preference(
+                    selected_local_model,
+                    models_dir=args.models_dir if args.explicit_models_dir else "")
+            if not args.check:
+                print(f"Using model file: {selected_local_model['name']} "
+                      f"({selected_local_model['size_human']})")
+
+    args.local_model_records = local_models
+    args.local_model_directories = local_model_directories
+    args.selected_model_file = selected_local_model
+
     if args.gui:
         return launch_frontend(args)
 
@@ -4415,6 +5084,15 @@ def main(argv=None) -> int:
         import_path = args.model
         implicit_import = True
     if import_path:
+        import_record = selected_local_model
+        try:
+            import_physical = str(Path(os.path.expanduser(import_path)).resolve())
+        except (OSError, RuntimeError):
+            import_physical = ""
+        if not import_record or import_record.get("path") != import_physical:
+            import_record = model_file_record_for_path(import_path)
+        if args.import_name == LOCAL_IMPORTED_MODEL:
+            args.import_name = import_record.get("ollama_name") or args.import_name
         host = args.host if args.host and infer_backend_from_host(args.host) == "ollama" \
             else DEFAULT_HOST
         importer = make_ollama_client(host, args.import_name, args.ctx)
@@ -4425,6 +5103,7 @@ def main(argv=None) -> int:
         if not import_gguf_to_ollama(import_path, args.import_name):
             return 1
         update_config(model=args.import_name, backend="ollama")
+        save_model_file_preference(import_record, model=args.import_name)
         print(f"Saved as Milelik's default model in {config_path()}")
         if not implicit_import:
             print('Now just run:  milelik "your task"')
@@ -4436,7 +5115,27 @@ def main(argv=None) -> int:
     toolbox = Toolbox(auto=args.auto, verbose=args.verbose, cmd_timeout=args.cmd_timeout)
 
     if args.check:
-        return run_check(client, requested_model=args.model)
+        return run_check(client, requested_model=args.model,
+                         local_models=local_models,
+                         local_model_directories=local_model_directories,
+                         selected_local_model=selected_local_model)
+
+    if args.pull and selected_local_model:
+        pull_host = args.host if args.host and infer_backend_from_host(args.host) == "ollama" \
+            else DEFAULT_HOST
+        pull_client = make_ollama_client(
+            pull_host, selected_local_model["ollama_name"], args.ctx)
+        if not pull_client.ensure_running():
+            err(f"Ollama isn't running at {pull_client.host}.")
+            print("Start it with:  ollama serve")
+            return 1
+        if import_gguf_to_ollama(selected_local_model["path"],
+                                  selected_local_model["ollama_name"]):
+            update_config(model=selected_local_model["ollama_name"], backend="ollama")
+            save_model_file_preference(
+                selected_local_model, model=selected_local_model["ollama_name"])
+            return 0
+        return 1
 
     if args.pull:
         pull_client = client if client.backend == "ollama" else make_ollama_client(
@@ -4463,7 +5162,23 @@ def main(argv=None) -> int:
                   f"  • Ollama instead: ollama pull {OLLAMA_TARGET_MODEL}")
         return 1
 
-    if not client.model_available():
+    model_ready = client.model_available()
+    if selected_local_model and client.backend == "ollama" and not model_ready:
+        imported_name = selected_local_model["ollama_name"]
+        found = client.resolve_available_model(imported_name, update=False) \
+            if hasattr(client, "resolve_available_model") else ""
+        if found:
+            client.model = found
+            model_ready = True
+        elif import_gguf_to_ollama(selected_local_model["path"], imported_name):
+            client.model = imported_name
+            update_config(model=imported_name, backend="ollama")
+            save_model_file_preference(selected_local_model, model=imported_name)
+            model_ready = True
+        else:
+            return 1
+
+    if not model_ready:
         if client.backend == "ollama":
             warn(f"Model '{client.model}' is not installed in Ollama yet.")
             print("Already have the GGUF file? Press n, then run:  "
