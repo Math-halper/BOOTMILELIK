@@ -31,10 +31,10 @@
       </div>
 
       <nav class="main-nav" aria-label="Milelik sections">
-        <button type="button" class="nav-button active" data-view="chat"><span aria-hidden="true">💬</span> Chat</button>
-        <button type="button" class="nav-button" data-view="workspace"><span aria-hidden="true">🧰</span> Workspace</button>
-        <button type="button" class="nav-button" data-view="apis"><span aria-hidden="true">🔌</span> APIs</button>
-        <button type="button" class="nav-button" data-view="settings"><span aria-hidden="true">⚙️</span> Preferences</button>
+        <button type="button" class="nav-button active" data-view="chat">Chat</button>
+        <button type="button" class="nav-button" data-view="workspace">Workspace</button>
+        <button type="button" class="nav-button" data-view="apis">APIs</button>
+        <button type="button" class="nav-button" data-view="settings">Preferences</button>
       </nav>
 
       <div class="sidebar-note">
@@ -51,7 +51,7 @@
         </div>
         <div class="topbar-actions">
           <span class="local-pill">127.0.0.1 local app</span>
-          <button id="refreshAllBtn" type="button" class="button secondary">↻ Refresh status</button>
+          <button id="refreshAllBtn" type="button" class="button secondary">Refresh status</button>
         </div>
       </header>
 
@@ -123,9 +123,9 @@
             <p class="muted">Root: <code id="workspaceRootLabel">Loading…</code></p>
           </div>
           <div class="button-row">
-            <button id="refreshWorkspaceBtn" type="button" class="button secondary">↻ Refresh files</button>
-            <button id="newFileBtn" type="button" class="button secondary">＋ New file</button>
-            <button id="newFolderBtn" type="button" class="button secondary">＋ New folder</button>
+            <button id="refreshWorkspaceBtn" type="button" class="button secondary">Refresh files</button>
+            <button id="newFileBtn" type="button" class="button secondary">+ New file</button>
+            <button id="newFolderBtn" type="button" class="button secondary">+ New folder</button>
           </div>
         </article>
 
@@ -184,7 +184,7 @@
 
             <div class="button-row">
               <button id="saveFileBtn" type="button" class="button primary">Save</button>
-              <button id="runFileBtn" type="button" class="button success">▶ Save &amp; run</button>
+              <button id="runFileBtn" type="button" class="button success">Save &amp; run</button>
               <button id="checkFileBtn" type="button" class="button secondary">Syntax check</button>
               <button id="downloadFileBtn" type="button" class="button ghost">Download</button>
               <button id="deleteFileBtn" type="button" class="button danger ghost-danger">Delete</button>
@@ -225,7 +225,7 @@
         <div class="api-layout">
           <div class="api-playgrounds">
             <article class="card">
-              <h3>🧮 Mathematics</h3>
+              <h3>Mathematics</h3>
               <form id="mathEvalForm" class="stack compact-stack">
                 <label for="mathExpression">Evaluate safely <span class="muted">(supports sqrt, sin, log, factorial, pi, e, tau)</span></label>
                 <div class="inline-fields">
@@ -258,7 +258,7 @@
             </article>
 
             <article class="card">
-              <h3>💻 Coding helpers</h3>
+              <h3>Coding helpers</h3>
               <form id="snippetForm" class="stack compact-stack">
                 <div class="inline-fields">
                   <label>Language
@@ -305,7 +305,7 @@
             </article>
 
             <article class="card">
-              <h3>🧰 Everyday utilities</h3>
+              <h3>Everyday utilities</h3>
               <form id="textUtilityForm" class="stack compact-stack">
                 <div class="inline-fields">
                   <select id="textOperation">
@@ -372,7 +372,7 @@
       <section id="view-settings" class="view" aria-labelledby="pageTitle">
         <form id="settingsForm" class="settings-grid">
           <article class="card">
-            <h3>🤖 Model preferences</h3>
+            <h3>Model preferences</h3>
             <p class="muted">These are saved in <code>~/.config/milelik/config.json</code> and used by both the CLI and this front end.</p>
             <label for="set-model">Model</label>
             <input id="set-model" list="modelOptions" autocomplete="off">
@@ -394,7 +394,7 @@
               <span><strong>Read models/ at startup</strong><br>
               <span class="muted">Inventory all AI model files in Milelik's models folders and choose from them.</span></span>
             </label>
-            <button id="refreshModelsBtn" class="button secondary" type="button">↻ Rescan models folder</button>
+            <button id="refreshModelsBtn" class="button secondary" type="button">Rescan models folder</button>
 
             <label for="set-backend">Model server</label>
             <select id="set-backend">
@@ -419,7 +419,7 @@
           </article>
 
           <article class="card">
-            <h3>🛡️ Safety and performance</h3>
+            <h3>Safety and performance</h3>
             <label class="checkbox-card">
               <input id="set-auto" type="checkbox">
               <span><strong>Auto-approve ordinary actions</strong><br>
@@ -436,7 +436,7 @@
           </article>
 
           <article class="card">
-            <h3>🧰 Front end and workspace</h3>
+            <h3>Front end and workspace</h3>
             <label for="set-workspace">Workspace folder</label>
             <input id="set-workspace" autocomplete="off">
 
@@ -477,7 +477,7 @@
           </article>
 
           <article class="card">
-            <h3>🔐 Connection</h3>
+            <h3>Connection</h3>
             <p class="muted">The terminal startup link sets a secure browser cookie automatically. If you opened the page another way, paste the token printed by <code>milelik --gui</code>.</p>
             <label for="tokenInput">API token</label>
             <input id="tokenInput" type="password" autocomplete="off" placeholder="Only needed if this page cannot connect">

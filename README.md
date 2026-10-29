@@ -1,4 +1,4 @@
-# 🤖 Milelik — BOOTMILELIK
+# Milelik — BOOTMILELIK
 
 A **fast, local AI assistant for linux Mint**, tuned for
 **Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M**. The AI model runs 100% on
@@ -32,7 +32,7 @@ dependency is declared in this repository under
 [`dependencies/`](dependencies/) and installed automatically, so there are no
 extra dependency commands to run by hand.
 
-## 🎯 The model: Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M
+## The model: Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M
 
 This model goes by different names in different places; Milelik recognises
 **all of them** and treats them as the same model:
@@ -118,7 +118,7 @@ local server, via `--model`. But the prompt format, sampling
 loop and tool-call parsing in Milelik are specifically tuned so this 7B coder
 reliably emits valid `<tool_call>` JSON.
 
-## 🚀 Install (linux Mint)
+## Install (linux Mint)
 
 ```bash
 git clone https://github.com/Math-halper/BOOTMILELIK.git
@@ -184,7 +184,7 @@ MODEL=qwen3:4b ./install.sh    # smaller/faster, weaker at multi-step tasks
 MODEL=qwen3:14b ./install.sh   # smarter, slower, needs more RAM/VRAM
 ```
 
-## 🖥️ Front end, workspace and local APIs
+## Front end, workspace and local APIs
 
 Start Milelik's browser app with:
 
@@ -228,7 +228,7 @@ conversion, quadratics, text tools, hashing, password generation and time.
 Full examples and the endpoint list are in [`docs/API.md`](docs/API.md), and a
 running server exposes OpenAPI at `/api/openapi.json`.
 
-## 💬 Using it
+## Using it
 
 One-off task:
 
@@ -248,7 +248,7 @@ milelik "in this repo: show git status, list open GitHub PRs and any failing CI"
 milelik "search GitHub for linux Mint screenshot tools written in Python"
 ```
 
-### 📺 Apps, VLC and desktop tools
+### Apps, VLC and desktop tools
 
 Just ask in plain English — Milelik picks the right tool:
 
@@ -278,7 +278,7 @@ full dependency set installed by `./install.sh`. App launches, screenshots,
 clipboard access, screen-lock and wallpaper changes ask for confirmation
 first (unless `--yolo`).
 
-### 🐙 Git & GitHub tools
+### Git & GitHub tools
 
 | Tool | What it can do |
 |---|---|
@@ -351,7 +351,7 @@ Environment variables `MILELIK_MODEL`, `MILELIK_BACKEND`, `MILELIK_HOST`,
 `MILELIK_WEB_HOST`, `MILELIK_WEB_PORT`, `OLLAMA_HOST`, `OPENAI_BASE_URL` and
 `MILELIK_API_KEY` also work.
 
-## ⚡ Making it fast
+## Making it fast
 
 - The default model is a 7B at Q4_K_M (~4.7 GB) — a good speed/quality
   balance. It needs roughly 6 GB of free RAM/VRAM once context is included.
@@ -374,7 +374,7 @@ Environment variables `MILELIK_MODEL`, `MILELIK_BACKEND`, `MILELIK_HOST`,
 > happily propose destructive commands if asked. If it goes off track, just
 > decline the command when it asks.
 
-## 🛡️ Safety
+## Safety
 
 Milelik can only do what *your user account* can do, and by default it can't
 even do that without asking:
@@ -406,7 +406,7 @@ Still: you're letting an AI run commands. Don't start it in a folder full of
 irreplaceable files with `--yolo` on day one, and read commands before you
 approve them until you trust your setup.
 
-## 🧩 How it works
+## How it works
 
 `milelik.py` is an agent loop around your local model server — Ollama's
 `/api/chat`, or `/v1/chat/completions` for LM Studio / llama.cpp
@@ -455,7 +455,7 @@ logic remain in `install.sh` and `setup-model.sh`. The maths evaluator parses
 a restricted Python AST rather than calling `eval`, and workspace subprocesses
 run without GitHub/model API tokens in their environment.
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -479,7 +479,7 @@ run without GitHub/model API tokens in their environment.
 | JavaScript code will not run in Workspace | Install/check the full bundled dependencies (`./dependencies/install-dependencies.sh --check`) — it includes Node.js and npm. Python and Bash snippets do not need Node. |
 | PR merge bounces at the prompt | By design: merging needs you to type `YES` (capitalised) in the terminal or browser approval dialog — it can't happen from `--yolo` or piped input. |
 
-## 🧪 Tests
+## Tests
 
 70 tests, no model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
@@ -490,7 +490,7 @@ a scripted installer-wizard run, and a real temporary Git repo are used):
 python3 -m unittest discover -s tests -v
 ```
 
-## 🗑️ Uninstall
+## Uninstall
 
 ```bash
 ./uninstall.sh   # removes Milelik only; Ollama/models are left alone

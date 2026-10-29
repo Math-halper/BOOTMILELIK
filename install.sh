@@ -325,7 +325,7 @@ print_summary() {
 
 run_setup_wizard() {
     echo
-    echo "🤖 Milelik setup wizard"
+    echo "Milelik setup wizard"
     echo "I'll ask a few preference questions. Press Enter whenever the default is fine."
     echo "You can change almost all of these later from the front end's Preferences page."
 
@@ -483,7 +483,7 @@ if [ "$FORCE_WIZARD" = "1" ] || { [ "$ASSUME_YES" = "0" ] && [ -t 0 ] && [ -t 1 
     INTERACTIVE=1
 fi
 
-echo "🤖 Installing Milelik"
+echo "Installing Milelik"
 if [ "$INTERACTIVE" = "1" ]; then
     run_setup_wizard
 else
@@ -706,7 +706,7 @@ fi
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
     *) echo
-       echo "⚠  $BIN_DIR is not on your PATH in this shell."
+       echo "Warning: $BIN_DIR is not on your PATH in this shell."
        echo "   linux Mint adds it automatically at login - open a NEW terminal,"
        echo "   or run:  export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
 esac
@@ -824,7 +824,7 @@ case "$LAUNCH_AFTER_INSTALL" in
 esac
 
 echo
-echo "✅ Done. Open Milelik your way:"
+echo "Done. Open Milelik your way:"
 if [ "$FRONTEND_ENABLED" = "1" ]; then
     echo "   Front end + workspace + APIs:  milelik --gui"
     echo "   (also available as the “Milelik Workspace” app and: milelik-web)"

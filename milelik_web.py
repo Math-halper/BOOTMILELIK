@@ -1799,7 +1799,7 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
     state = server.state
     url = (f"http://{_display_host(host)}:{state.bound_port}/"
            f"?token={urllib.parse.quote(state.token)}")
-    print("\n🤖 Milelik front end is running", flush=True)
+    print("\nMilelik front end is running", flush=True)
     print(f"   Open:      {url}", flush=True)
     print(f"   Workspace: {state.workspace.root}", flush=True)
     local = state.local_models_payload()

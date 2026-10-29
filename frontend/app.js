@@ -419,7 +419,7 @@ function renderTreeNodes(nodes, container) {
       const details = document.createElement("details");
       if (node.path === "examples") details.open = true;
       const summary = document.createElement("summary");
-      summary.textContent = `📁 ${node.name}`;
+      summary.textContent = `${node.name}/`;
       const children = document.createElement("div");
       children.className = "file-children";
       renderTreeNodes(node.children || [], children);
@@ -430,7 +430,7 @@ function renderTreeNodes(nodes, container) {
       button.type = "button";
       button.className = "file-button";
       button.dataset.path = node.path;
-      button.textContent = `📄 ${node.name}`;
+      button.textContent = node.name;
       if (node.path === $("#currentFilePath").value) button.classList.add("active");
       button.addEventListener("click", () => openWorkspaceFile(node.path));
       container.append(button);

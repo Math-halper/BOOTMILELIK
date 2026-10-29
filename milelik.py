@@ -129,10 +129,10 @@ def info(msg=""):
     print(msg)
 
 def warn(msg):
-    print(c_yellow(f"⚠ {msg}"), file=sys.stderr)
+    print(c_yellow(f"Warning: {msg}"), file=sys.stderr)
 
 def err(msg):
-    print(c_red(f"✖ {msg}"), file=sys.stderr)
+    print(c_red(f"Error: {msg}"), file=sys.stderr)
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -905,7 +905,7 @@ def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODE
             err(f"Failed to run `ollama create`: {e}")
             return False
     if getattr(proc, "returncode", 1) == 0:
-        info(c_green(f"✔ Imported. Milelik will use it as '{ollama_name}'."))
+        info(c_green(f"Imported. Milelik will use it as '{ollama_name}'."))
         return True
     err("`ollama create` failed - see the output above.")
     return False
@@ -1096,7 +1096,7 @@ class Toolbox:
                     action=action, detail=detail,
                     dangerous_reason=dangerous_reason, sudo=sudo,
                     from_user=from_user))
-            print(c_red(f"\n⛔ DANGEROUS — this looks like {dangerous_reason}:"))
+            print(c_red(f"\nDANGEROUS — this looks like {dangerous_reason}:"))
             if detail:
                 print(f"   {detail}")
             if not sys.stdin.isatty():
@@ -2413,7 +2413,7 @@ class Toolbox:
             bits.append("(private)")
         if r.get("language"):
             bits.append(str(r["language"]))
-        bits.append(f"★{r.get('stargazers_count', 0)}")
+        bits.append(f"stars:{r.get('stargazers_count', 0)}")
         bits.append(f"forks:{r.get('forks_count', 0)}")
         bits.append(f"issues:{r.get('open_issues_count', 0)}")
         if r.get("updated_at"):
@@ -4378,7 +4378,7 @@ If (and only if) native tool calling is unavailable, request a tool by replying 
 </tool_call>"""
 
 class Spinner:
-    FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    FRAMES = "|/-\\"
 
     def __init__(self, label="Thinking"):
         self.label = label
@@ -4517,7 +4517,7 @@ class Agent:
                 label = " ".join(bit for bit in label_bits if bit).strip()
                 if name == "check_port":
                     label = f"{args.get('host', '')}:{args.get('port', '')}"
-                info(f"{c_cyan('🔧 ' + name)} {c_dim(one_line(label))}")
+                info(f"{c_cyan('Tool: ' + name)} {c_dim(one_line(label))}")
 
                 if seen_calls[signature] > 3:
                     result = ("You have already called this exact tool with these exact "
@@ -4636,7 +4636,7 @@ HELP_TEXT = """Commands:
 Anything else is sent to the AI as a task."""
 
 def interactive(agent: Agent, client, toolbox: Toolbox):
-    print(c_bold("\n🤖 Milelik") + f"  model={client.model}  "
+    print(c_bold("\nMilelik") + f"  model={client.model}  "
           f"backend={getattr(client, 'backend', 'ollama')}  "
           f"{'YOLO (auto-approve) ON' if toolbox.auto else 'confirmations ON'}")
     print(c_dim("Type a task, /help for commands, /exit to quit.\n"))
@@ -4741,8 +4741,8 @@ def run_check(client, requested_model: str = "", local_models=None,
         except OllamaError:
             models = []
         found = probe.resolve_available_model(requested_model, update=False)
-        mark = c_green(f"✔ up - target model found as '{found}'") if found \
-            else c_yellow("✔ up - target model NOT loaded/installed here")
+        mark = c_green(f"Up - target model found as '{found}'") if found \
+            else c_yellow("Up - target model NOT loaded/installed here")
         print(f"  {label:<10} {probe.host}  {mark}")
         if models:
             shown = ", ".join(models[:6]) + ("…" if len(models) > 6 else "")
@@ -4758,7 +4758,7 @@ def run_check(client, requested_model: str = "", local_models=None,
     if local_dirs_text:
         print(f"             folders: {local_dirs_text}")
     for record in local_models[:8]:
-        mark = "✔" if record.get("supported") else "•"
+        mark = "[ok]" if record.get("supported") else "•"
         suffix = " (selected)" if selected_local_model and \
             record.get("id") == selected_local_model.get("id") else ""
         print(f"             {mark} {record.get('name')} — "
@@ -4770,16 +4770,16 @@ def run_check(client, requested_model: str = "", local_models=None,
           f"host={getattr(client, 'host', '?')}  model={getattr(client, 'model', '?')}")
     if not any_up:
         ok = False
-        print(c_red("  ✖ No local model server is reachable"))
+        print(c_red("  No local model server is reachable"))
         print("    Fix (pick one):")
         print(f"      ollama pull {OLLAMA_TARGET_MODEL}   # then: ollama serve")
         print("      ./setup-model.sh ~/Downloads/" + TARGET_GGUF_FILENAME)
         print("      …or load the GGUF in LM Studio and start its server (port 1234)")
     elif client.model_available():
-        print(c_green(f"  ✔ Selected model '{client.model}' is available"))
+        print(c_green(f"  Selected model '{client.model}' is available"))
     else:
         ok = False
-        print(c_yellow(f"  ✖ Selected model '{client.model}' is not available "
+        print(c_yellow(f"  Selected model '{client.model}' is not available "
                        "on the selected backend"))
         if getattr(client, "backend", "") == "ollama":
             print(f"    Fix:  ollama pull {client.model}")
@@ -4793,11 +4793,11 @@ def run_check(client, requested_model: str = "", local_models=None,
     try:
         tb = Toolbox(auto=True)
         result = tb.dns_lookup("duckduckgo.com")
-        print(c_green(f"✔ DNS works ({result})") if "->" in result else c_yellow(result))
+        print(c_green(f"DNS works ({result})") if "->" in result else c_yellow(result))
         if "->" not in result:
             ok = False
     except Exception as e:  # pragma: no cover
-        print(c_red(f"✖ {e}"))
+        print(c_red(f"Error: {e}"))
         ok = False
 
     optional = [("VLC", "vlc"), ("playerctl", "playerctl"), ("gh", "gh"),
