@@ -18,9 +18,10 @@ Repository = "https://github.com/Math-halper/BOOTMILELIK"
 
 [project.scripts]
 milelik = "milelik:main"
+milelik-web = "milelik_web:main"
 
 [tool.setuptools]
-py-modules = ["milelik"]
+py-modules = ["milelik", "milelik_web"]
 
 [tool.setuptools.dynamic]
 version = { attr = "milelik.__version__" }

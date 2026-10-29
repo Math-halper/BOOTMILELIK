@@ -10,7 +10,7 @@ and install by hand.
 |---|---|---|
 | Python packages | None — `requirements.txt` and `pyproject.toml` declare zero third-party packages | Not applicable; Python 3.10+ standard library only |
 | Core system packages | [`apt-required.txt`](apt-required.txt) | [`install-dependencies.sh`](install-dependencies.sh) |
-| VLC/media, desktop, LibreOffice, Git and GitHub helper packages | [`apt-tools.txt`](apt-tools.txt) | `install-dependencies.sh` (the default full mode) |
+| VLC/media, desktop, LibreOffice, Git/GitHub, Node/npm and Python project packages | [`apt-tools.txt`](apt-tools.txt) | `install-dependencies.sh` (the default full mode) |
 | Extra fallback programs | [`apt-optional.txt`](apt-optional.txt) | `install-dependencies.sh --with-optional` |
 | Ollama runtime | Bootstrap logic in [`../install.sh`](../install.sh) | The main installer |
 | Qwen2.5-Coder model | Model identity/template/setup logic in [`../milelik.py`](../milelik.py), [`../setup-model.sh`](../setup-model.sh) and [`../Modelfile.qwen2.5-coder-abliterated`](../Modelfile.qwen2.5-coder-abliterated) | The main installer, from an existing GGUF or the Ollama library |

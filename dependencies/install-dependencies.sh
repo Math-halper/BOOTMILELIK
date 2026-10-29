@@ -113,7 +113,8 @@ check_commands() {
     if [ "$MODE" != "required" ]; then
         commands+=(vlc playerctl gh git ffprobe mediainfo libreoffice
                    notify-send xclip xsel wl-copy wl-paste brightnessctl
-                   pactl gnome-screenshot gsettings gtk-launch)
+                   pactl gnome-screenshot gsettings gtk-launch
+                   node npm pip3)
     fi
     if [ "$MODE" = "with-optional" ]; then
         commands+=(feh import maim scrot xfce4-screenshooter)

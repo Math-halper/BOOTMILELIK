@@ -876,7 +876,8 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertTrue({
             "brightnessctl", "ffmpeg", "gh", "git", "gnome-screenshot",
             "libglib2.0-bin", "libgtk-3-bin", "libnotify-bin",
-            "libreoffice", "mediainfo", "playerctl", "pulseaudio-utils",
+            "libreoffice", "mediainfo", "nodejs", "npm", "playerctl",
+            "pulseaudio-utils", "python3-pip", "python3-venv",
             "vlc", "wl-clipboard", "xclip", "xsel",
         }.issubset(tools))
         self.assertTrue({
@@ -915,6 +916,7 @@ class TestBundledDependencies(unittest.TestCase):
             "gh", "git", "ffprobe", "mediainfo", "libreoffice", "notify-send",
             "xclip", "xsel", "wl-copy", "wl-paste", "brightnessctl", "pactl",
             "gnome-screenshot", "gsettings", "gtk-launch",
+            "node", "npm", "pip3",
         ]
         with tempfile.TemporaryDirectory() as tmp:
             bindir = Path(tmp)
@@ -958,6 +960,11 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn("DEPENDENCY_MODE", installer)
         self.assertIn('cp -a "$SCRIPT_DIR/dependencies" "$APP_DIR/dependencies"', installer)
         self.assertIn('requirements.txt pyproject.toml', installer)
+        self.assertIn('run_setup_wizard', installer)
+        self.assertIn('Step 5 of 7 — browser front end and workspace', installer)
+        self.assertIn('cp -a "$SCRIPT_DIR/frontend" "$APP_DIR/frontend"', installer)
+        self.assertIn('milelik_web.py', installer)
+        self.assertIn('milelik-web', installer)
 
 
 if __name__ == "__main__":

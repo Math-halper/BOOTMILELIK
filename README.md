@@ -14,19 +14,21 @@ your permission before running commands or making changes — see
 [Safety](#-safety) below.
 
 ```
-You ──► milelik (agent) ──► local model (Ollama / LM Studio / llama.cpp)
-              │
-              ├──► bash commands + files      (with your OK)
-              ├──► fetch_url / web_search ──► internet
-              ├──► apps: VLC, browser, files, terminal, LibreOffice…
-              ├──► desktop: media, volume, screenshots, notifications…
-              └──► git_repo / github_* ─────► GitHub (repos, issues, PRs, CI)
+Browser ──► Milelik front end/workspace/APIs ──► milelik agent ──► local model
+Terminal ─────────────────────────────────────►    │        (Ollama / LM Studio / llama.cpp)
+                                                   ├──► bash commands + files (with your OK)
+                                                   ├──► workspace editor + Python/Bash/JS runner
+                                                   ├──► local coding / maths / utility APIs
+                                                   ├──► fetch_url / web_search ──► internet
+                                                   ├──► apps: VLC, browser, files, LibreOffice…
+                                                   └──► git_repo / github_* ──► GitHub
 ```
 
-Single Python file, **zero pip dependencies** (standard library only). Every
-system dependency is declared in this repository under
-[`dependencies/`](dependencies/) and installed automatically by
-`./install.sh`, so there are no extra dependency commands to run by hand.
+Pure Python standard library, **zero pip dependencies**. The guided installer
+asks for your model, safety, workspace and front-end preferences. Every system
+dependency is declared in this repository under
+[`dependencies/`](dependencies/) and installed automatically, so there are no
+extra dependency commands to run by hand.
 
 ## 🎯 The model: Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M
 
@@ -96,34 +98,44 @@ cd BOOTMILELIK
 ./install.sh
 ```
 
-That one command installs **all of Milelik's declared dependencies**, then
-Ollama (if needed), sets up
-**Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M** (~4.7 GB — imported from a
-GGUF it finds in the usual places, or downloaded), installs the `milelik`
-command, and adds a Milelik entry to your app menu.
+In a terminal, that command opens Milelik's **7-step setup wizard**. Press
+Enter to accept a highlighted default, or choose:
 
-The system packages are not an undocumented side list: they live in this
-repository in [`dependencies/apt-required.txt`](dependencies/apt-required.txt)
-(core runtime), [`dependencies/apt-tools.txt`](dependencies/apt-tools.txt)
-(VLC/media, desktop, LibreOffice, Git and GitHub helpers) and
-[`dependencies/apt-optional.txt`](dependencies/apt-optional.txt) (extra
-fallback programs). `./install.sh` runs
-[`dependencies/install-dependencies.sh`](dependencies/install-dependencies.sh)
-for you. See [`dependencies/README.md`](dependencies/README.md) for the full
-dependency map. Useful variants:
+1. Dependency set (full/core/optional/none)
+2. Where the model comes from: automatic Ollama download, your existing GGUF,
+   a model already loaded in LM Studio/llama.cpp, or another Ollama model
+3. Fast / balanced / quality / custom performance settings
+4. Ask-before-acting or auto-approve ordinary actions
+5. Browser front end, workspace folder, port, theme and opening page
+6. Optional GitHub login
+7. What to open when installation finishes
+
+It shows a summary before changing anything, saves the answers to
+`~/.config/milelik/config.json`, installs **all declared dependencies**, sets
+up **Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M** unless you selected an
+existing local server, and adds both **Milelik** and **Milelik Workspace** to
+your app menu.
 
 ```bash
-./install.sh                                      # full dependency set (default)
-DEPENDENCY_MODE=with-optional ./install.sh        # full + optional fallbacks
-DEPENDENCY_MODE=required ./install.sh             # core packages only
-DEPENDENCY_MODE=none ./install.sh                 # skip apt; manage packages yourself
-./dependencies/install-dependencies.sh --check    # verify the declared packages later
-gh auth login   # once, for GitHub write actions (issues, PRs, merging…)
+./install.sh                 # friendly preference wizard in a terminal
+./install.sh --wizard        # force the questions
+./install.sh --yes           # no questions; sensible defaults
+./install.sh --help          # every installer option
 ```
 
-Then open a **new terminal** and try:
+The system packages live in this repository in
+[`dependencies/apt-required.txt`](dependencies/apt-required.txt) (core),
+[`dependencies/apt-tools.txt`](dependencies/apt-tools.txt) (VLC/media,
+desktop, LibreOffice, Git/GitHub, Node/npm and Python project tools) and
+[`dependencies/apt-optional.txt`](dependencies/apt-optional.txt) (fallbacks).
+`./install.sh` runs
+[`dependencies/install-dependencies.sh`](dependencies/install-dependencies.sh)
+for you. See [`dependencies/README.md`](dependencies/README.md) for the map.
+
+Then open a **new terminal** and try the front end or CLI:
 
 ```bash
+milelik --gui          # browser chat + workspace/code runner + local APIs
 milelik "what is my local IP, public IP, and how much disk space is free?"
 milelik --interactive
 ```
@@ -141,6 +153,47 @@ GGUF=/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf ./install.sh
 MODEL=qwen3:4b ./install.sh    # smaller/faster, weaker at multi-step tasks
 MODEL=qwen3:14b ./install.sh   # smarter, slower, needs more RAM/VRAM
 ```
+
+## 🖥️ Front end, workspace and local APIs
+
+Start Milelik's browser app with:
+
+```bash
+milelik --gui
+# equivalent commands:
+milelik-web
+milelik --gui --web-port 8766 --workspace-dir ~/Projects
+```
+
+It runs locally at `http://127.0.0.1:8765` by default and opens your browser.
+The terminal prints a one-time token link; that sets a browser cookie for the
+token-protected APIs. Keep the token private because the workspace APIs can
+run code on your device.
+
+The front end has four pages:
+
+- **Chat** — the full Milelik agent with quick prompts, its 26 tools and
+  browser approval dialogs (dangerous actions still require typing `YES`).
+- **Workspace** — a file tree and editor on your device, Python/Bash/
+  JavaScript file runner, stdin box, syntax check, workspace terminal,
+  suggested project commands, downloads, and **Clone from GitHub**. Clone a
+  repository directly into the workspace instead of downloading a ZIP in a
+  browser, extracting it elsewhere and hunting for a terminal.
+- **APIs** — interactive local APIs for coding, mathematics and utilities,
+  plus an endpoint catalogue and generic API tester.
+- **Preferences** — the same model/backend/performance/safety/workspace/theme
+  preferences asked by the installer, saved for both CLI and front end.
+
+The first launch creates `~/MilelikWorkspace` (or your chosen folder) with
+small Python/JavaScript examples. Workspace paths cannot escape that folder.
+Code execution is deliberately local and runs as your linux user; it is meant
+for code you wrote or chose to clone, not as a sandbox for untrusted code.
+
+Local APIs include chat and all Milelik tools, workspace files/cloning, code
+run/syntax/regex/encoding, safe maths evaluation, statistics, unit
+conversion, quadratics, text tools, hashing, password generation and time.
+Full examples and the endpoint list are in [`docs/API.md`](docs/API.md), and a
+running server exposes OpenAPI at `/api/openapi.json`.
 
 ## 💬 Using it
 
@@ -237,6 +290,8 @@ Interactive chat (`milelik -i`) — keeps context between tasks. Inside it:
 Useful flags: `milelik --help` for all of them.
 
 ```bash
+milelik --gui                   # browser front end + workspace + local APIs
+milelik --gui --web-port 9876 --workspace-dir ~/Projects
 milelik --check                 # diagnose Ollama/LM Studio/llama.cpp, model, network
 milelik --model Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M "..."
 milelik --backend openai --host http://127.0.0.1:1234 "..."   # force LM Studio
@@ -247,11 +302,14 @@ milelik -v "..."                 # show full tool output + which backend/model i
 milelik --max-steps 20 "..."    # allow longer, multi-step tasks
 ```
 
-Settings live in `~/.config/milelik/config.json` (`milelik --init-config`
-creates one): `model`, `backend` (`auto`/`ollama`/`openai`), `host`, `ctx`,
-`max_steps`, `auto`. Environment variables `MILELIK_MODEL`, `MILELIK_BACKEND`,
-`MILELIK_HOST`, `OLLAMA_HOST`, `OPENAI_BASE_URL` and `MILELIK_API_KEY` also
-work — `host` can point at a model server on another machine on your network.
+Settings live in `~/.config/milelik/config.json`. The installer wizard creates
+them, the front end's **Preferences** page edits them, and
+`milelik --init-config` can recreate defaults. They include `model`,
+`backend`, `host`, `ctx`, `max_steps`, `cmd_timeout`, `auto`, `workspace`,
+`web_host`, `web_port`, `open_browser`, `frontend_enabled`, `ui_theme` and
+`ui_default_view`. Environment variables `MILELIK_MODEL`, `MILELIK_BACKEND`,
+`MILELIK_HOST`, `MILELIK_WORKSPACE`, `MILELIK_WEB_HOST`, `MILELIK_WEB_PORT`,
+`OLLAMA_HOST`, `OPENAI_BASE_URL` and `MILELIK_API_KEY` also work.
 
 ## ⚡ Making it fast
 
@@ -295,6 +353,11 @@ even do that without asking:
   things needing confirmation are refused.
 - Web fetches are GET-only and capped at ~2 MB; binary downloads aren't shown
   to the model.
+- The front end binds to `127.0.0.1` by default and its APIs require a random
+  per-launch token (browser cookie or `X-Milelik-Token` header). Workspace
+  file APIs reject paths outside the chosen workspace. The code runner is
+  still intentionally *your* code running as *your* user, so do not expose it
+  to an untrusted network or run cloned code you have not inspected.
 - Everything the model sees stays on your machine — the only network traffic
   is your local model server on `localhost` plus whatever pages/searches
   *you* asked it to do.
@@ -307,7 +370,10 @@ approve them until you trust your setup.
 
 `milelik.py` is an agent loop around your local model server — Ollama's
 `/api/chat`, or `/v1/chat/completions` for LM Studio / llama.cpp
-(auto-detected; see `--backend`):
+(auto-detected; see `--backend`). `milelik_web.py` reuses that same agent and
+toolbox, serves `frontend/`, routes tool confirmations to browser approval
+dialogs through `Toolbox(confirm_callback=…)`, and provides the workspace and
+utility APIs:
 
 1. Your task + a system prompt go to the local model along with tool schemas.
 2. The model replies with a tool call (e.g. `run_command {"command": "df -h"}`).
@@ -339,11 +405,13 @@ entries (argument lists, never a shell), media tools use MPRIS via
 Python dependencies are deliberately empty (`requirements.txt` and
 `pyproject.toml` declare none). System dependencies are version-controlled
 as apt manifests in `dependencies/`; `install-dependencies.sh` installs or
-checks them, and `install.sh` copies that directory beside the installed
-`milelik.py` so runtime error messages can point to the exact bundled
-installer. Apt supplies the signed distribution binaries and their
-transitive libraries for the user's Mint release, while the Ollama/model
-bootstrap logic remains in `install.sh` and `setup-model.sh`.
+checks them, and `install.sh` copies the manifests, dependency installer,
+`milelik_web.py` and `frontend/` beside the installed `milelik.py`. Apt
+supplies the signed distribution binaries and transitive libraries for the
+user's Mint release, while the preference wizard plus Ollama/model bootstrap
+logic remain in `install.sh` and `setup-model.sh`. The maths evaluator parses
+a restricted Python AST rather than calling `eval`, and workspace subprocesses
+run without GitHub/model API tokens in their environment.
 
 ## 🔧 Troubleshooting
 
@@ -361,13 +429,18 @@ bootstrap logic remains in `install.sh` and `setup-model.sh`.
 | "Application not found" | Ask it to `list_apps` first to get exact names/ids, or install the app. Flatpak/Snap apps appear once their `.desktop` files are in the standard application dirs. |
 | GitHub says 401/403 / "needs authentication" | Read-only public lookups need no login; writes do. Run `gh auth login`, or set `GITHUB_TOKEN` in your shell profile. 403 can also be rate limiting — being logged in raises the limit a lot. Check with "who am I on GitHub?" / `github_account auth_status`. |
 | GitHub tool says "no repository given" | Run Milelik inside the cloned repo (it reads the `origin` remote), or name it: "…in owner/repo". |
-| PR merge bounces at the prompt | By design: merging needs you to type `YES` (capitalised) at an interactive terminal — it can't happen from `--yolo` or piped input. |
+| Front end says “Connection token needed” | Open it using the complete URL printed by `milelik --gui` (it contains `?token=…` and sets a cookie), or paste the printed token into Preferences → Connection. For scripts, send `X-Milelik-Token`. |
+| Front-end port is already in use | Another Milelik/server is probably already running. Use the existing browser tab, stop the old process with Ctrl+C, or start `milelik --gui --web-port 8766`. |
+| Front end loads but the model does not | The workspace/APIs work without a model. For Chat, run `ollama serve` or load the GGUF in LM Studio/llama.cpp, then check model/backend/host in Preferences and run `milelik --check`. |
+| JavaScript code will not run in Workspace | Install/check the full bundled dependencies (`./dependencies/install-dependencies.sh --check`) — it includes Node.js and npm. Python and Bash snippets do not need Node. |
+| PR merge bounces at the prompt | By design: merging needs you to type `YES` (capitalised) in the terminal or browser approval dialog — it can't happen from `--yolo` or piped input. |
 
 ## 🧪 Tests
 
-50 tests, no model or internet required (fake Ollama, fake LM Studio/
+64 tests, no model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
-LibreOffice binaries, and a real temporary Git repo are used):
+LibreOffice binaries, the real front-end HTTP server on an ephemeral port,
+a scripted installer-wizard run, and a real temporary Git repo are used):
 
 ```bash
 python3 -m unittest discover -s tests -v

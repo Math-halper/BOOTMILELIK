@@ -1,5 +1,6 @@
 # Packages used by Milelik's app, VLC/media, desktop, LibreOffice,
-# local Git and GitHub tools. These are installed by default together
+# local Git/GitHub tools and Workspace code runner. These are installed
+# by default together
 # with apt-required.txt ("full" mode).
 
 brightnessctl
@@ -12,8 +13,12 @@ libgtk-3-bin
 libnotify-bin
 libreoffice
 mediainfo
+nodejs
+npm
 playerctl
 pulseaudio-utils
+python3-pip
+python3-venv
 vlc
 wl-clipboard
 xclip

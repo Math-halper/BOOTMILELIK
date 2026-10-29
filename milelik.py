@@ -44,7 +44,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 # The model Milelik is tuned for out of the box. Note the Ollama library
 # spells the repo "abliterate", while the Hugging Face GGUF file uses
@@ -60,6 +60,9 @@ LLAMACPP_HOST = "http://127.0.0.1:8080"
 DEFAULT_CTX = 8192
 DEFAULT_MAX_STEPS = 12
 DEFAULT_CMD_TIMEOUT = 60
+DEFAULT_WEB_HOST = "127.0.0.1"
+DEFAULT_WEB_PORT = 8765
+DEFAULT_WORKSPACE = "~/MilelikWorkspace"
 MAX_TOOL_OUTPUT = 8000          # chars of tool output fed back to the model
 MAX_DOWNLOAD_BYTES = 2_000_000  # cap web downloads at ~2 MB
 USER_AGENT = f"Milelik/{__version__} (+https://github.com/Math-halper/BOOTMILELIK)"
@@ -515,9 +518,13 @@ def parse_search_results(markup: str, max_results: int = 5):
 class Toolbox:
     def __init__(self, auto: bool = False, verbose: bool = False,
                  cwd: str | None = None, cmd_timeout: int = DEFAULT_CMD_TIMEOUT,
-                 app_dirs=None, github_api_base: str | None = None):
+                 app_dirs=None, github_api_base: str | None = None,
+                 confirm_callback=None):
         self.auto = auto                # --yolo: skip normal confirmations
         self.verbose = verbose
+        # Optional UI hook used by the web front end. It receives the same
+        # keyword arguments as confirm() and returns True/False.
+        self.confirm_callback = confirm_callback
         self.cwd = cwd or os.getcwd()
         self.cmd_timeout = cmd_timeout
         if app_dirs is None:
@@ -551,6 +558,11 @@ class Toolbox:
         Anything confirmed needs an interactive terminal.
         """
         if dangerous_reason:
+            if self.confirm_callback is not None:
+                return bool(self.confirm_callback(
+                    action=action, detail=detail,
+                    dangerous_reason=dangerous_reason, sudo=sudo,
+                    from_user=from_user))
             print(c_red(f"\n⛔ DANGEROUS — this looks like {dangerous_reason}:"))
             if detail:
                 print(f"   {detail}")
@@ -567,6 +579,10 @@ class Toolbox:
             return True
         if self.auto and not sudo:
             return True
+        if self.confirm_callback is not None:
+            return bool(self.confirm_callback(
+                action=action, detail=detail, dangerous_reason=None,
+                sudo=sudo, from_user=from_user))
         if not sys.stdin.isatty():
             warn(f"Skipped (needs confirmation but no terminal): {action}")
             return False
@@ -4021,13 +4037,29 @@ def load_config() -> dict:
     except (OSError, ValueError):
         return {}
 
+def default_config() -> dict:
+    """All user preferences understood by the CLI, installer and web UI."""
+    return {
+        "model": DEFAULT_MODEL,
+        "backend": "auto",
+        "host": "",
+        "ctx": DEFAULT_CTX,
+        "max_steps": DEFAULT_MAX_STEPS,
+        "auto": False,
+        "cmd_timeout": DEFAULT_CMD_TIMEOUT,
+        "workspace": DEFAULT_WORKSPACE,
+        "web_host": DEFAULT_WEB_HOST,
+        "web_port": DEFAULT_WEB_PORT,
+        "open_browser": True,
+        "frontend_enabled": True,
+        "ui_theme": "system",
+        "ui_default_view": "chat",
+    }
+
 def write_default_config() -> Path:
     p = config_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({
-        "model": DEFAULT_MODEL, "backend": "auto", "host": "",
-        "ctx": DEFAULT_CTX, "max_steps": DEFAULT_MAX_STEPS, "auto": False,
-    }, indent=2), encoding="utf-8")
+    p.write_text(json.dumps(default_config(), indent=2), encoding="utf-8")
     return p
 
 def update_config(**updates) -> Path:
@@ -4201,7 +4233,8 @@ def run_check(client, requested_model: str = "") -> int:
                 ("git", "git"), ("xdg-open", "xdg-open"),
                 ("gtk-launch", "gtk-launch"), ("LibreOffice", "libreoffice"),
                 ("ffprobe", "ffprobe"), ("notify-send", "notify-send"),
-                ("xclip", "xclip"), ("brightnessctl", "brightnessctl")]
+                ("xclip", "xclip"), ("brightnessctl", "brightnessctl"),
+                ("node", "node"), ("npm", "npm")]
     found = [name for name, binary in optional if shutil.which(binary)]
     missing = [name for name, binary in optional if not shutil.which(binary)]
     try:
@@ -4218,6 +4251,15 @@ def run_check(client, requested_model: str = "") -> int:
         "`gh auth login` recommended for GitHub write actions"
         if shutil.which("gh") else
         "install gh + `gh auth login`, or set GITHUB_TOKEN, for write actions"))
+    web_ready = (_APP_DIR / "milelik_web.py").is_file() and \
+        (_APP_DIR / "frontend" / "index.html").is_file()
+    web_cfg = default_config()
+    web_cfg.update(load_config())
+    print("  Web UI : " + (
+        f"ready — run `milelik --gui` (http://{web_cfg.get('web_host')}:"
+        f"{web_cfg.get('web_port')}, workspace {web_cfg.get('workspace')})"
+        if web_ready else
+        "not installed — re-run ./install.sh and enable the front end"))
 
     print(c_green("\nAll good - try:  milelik \"what is my local IP and public IP?\"")
           if ok else c_yellow("\nSomething above needs fixing before Milelik can work."))
@@ -4241,6 +4283,7 @@ def parse_args(argv=None):
   milelik "play ~/Videos/demo.mp4 in VLC fullscreen, then tell me its length"
   milelik "list the open pull requests and failing CI runs in this repo"
   milelik "open my Documents folder and take a screenshot"
+  milelik --gui                  # browser front end + workspace + local APIs
   milelik --interactive
   milelik --model {TARGET_MODEL_LABEL} "check my disk and memory"
   milelik --backend openai --host http://127.0.0.1:1234 "check my disk"   # LM Studio
@@ -4276,8 +4319,27 @@ def parse_args(argv=None):
                    help="Max tool-using steps per task (default: 12)")
     p.add_argument("--ctx", type=int, default=int(cfg.get("ctx", DEFAULT_CTX)),
                    help="Model context size in tokens (default: 8192)")
-    p.add_argument("--cmd-timeout", type=int, default=DEFAULT_CMD_TIMEOUT,
+    p.add_argument("--cmd-timeout", type=int,
+                   default=int(cfg.get("cmd_timeout", DEFAULT_CMD_TIMEOUT)),
                    help="Default timeout for shell commands, seconds (default: 60)")
+    p.add_argument("--gui", "--web", "--frontend", dest="gui", action="store_true",
+                   help="Start Milelik's browser front end, local workspace and APIs, then exit when stopped")
+    p.add_argument("--workspace-dir", "--workspace", dest="workspace_dir",
+                   default=os.environ.get("MILELIK_WORKSPACE",
+                                          cfg.get("workspace", DEFAULT_WORKSPACE)),
+                   help="Folder used by the web workspace/code runner")
+    p.add_argument("--web-host", default=os.environ.get(
+        "MILELIK_WEB_HOST", cfg.get("web_host", DEFAULT_WEB_HOST)),
+                   help="Address for --gui (default: 127.0.0.1; use 0.0.0.0 only on a trusted LAN)")
+    p.add_argument("--web-port", type=int, default=int(
+        os.environ.get("MILELIK_WEB_PORT", cfg.get("web_port", DEFAULT_WEB_PORT))),
+                   help="Port for --gui (default: 8765)")
+    p.add_argument("--open-browser", dest="open_browser", action="store_true",
+                   default=argparse.SUPPRESS,
+                   help="Open a browser when starting --gui")
+    p.add_argument("--no-open-browser", dest="open_browser", action="store_false",
+                   default=argparse.SUPPRESS,
+                   help="Do not open a browser when starting --gui")
     p.add_argument("--check", action="store_true",
                    help="Check Ollama/LM Studio/llama.cpp, the model, and network, then exit")
     p.add_argument("--pull", action="store_true",
@@ -4294,6 +4356,43 @@ def parse_args(argv=None):
     p.add_argument("--version", action="version", version=f"milelik {__version__}")
     return p.parse_args(argv)
 
+def launch_frontend(args) -> int:
+    """Load the sibling web module and run the local front end.
+
+    The web UI is kept in milelik_web.py so the command-line program stays
+    usable without it; dynamic loading also works from a source checkout and
+    from ~/.local/share/milelik after installation.
+    """
+    web_path = Path(__file__).resolve().parent / "milelik_web.py"
+    if not web_path.is_file():
+        err(f"Milelik's front end is missing: {web_path}")
+        print("Re-run ./install.sh from the Milelik repository.")
+        return 1
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("milelik_web", web_path)
+    if spec is None or spec.loader is None:
+        err(f"Could not load Milelik's front end from {web_path}")
+        return 1
+    web = importlib.util.module_from_spec(spec)
+    sys.modules["milelik_web"] = web
+    spec.loader.exec_module(web)
+
+    cfg = load_config()
+    open_browser = getattr(args, "open_browser", None)
+    if open_browser is None:
+        open_browser = bool(cfg.get("open_browser", True))
+    try:
+        return int(web.run_server(
+            host=args.web_host,
+            port=args.web_port,
+            workspace=args.workspace_dir,
+            open_browser=open_browser,
+            core_module=sys.modules[__name__],
+        ))
+    except KeyboardInterrupt:
+        print("\nMilelik front end stopped.")
+        return 130
+
 def main(argv=None) -> int:
     args = parse_args(argv)
 
@@ -4303,6 +4402,9 @@ def main(argv=None) -> int:
     if args.init_config:
         print(f"Wrote {write_default_config()}")
         return 0
+
+    if args.gui:
+        return launch_frontend(args)
 
     # --import-gguf, or `--model /path/to/model.gguf`, means: put this exact
     # file into Ollama with the correct Qwen2.5-Coder template and use it.

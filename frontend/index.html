@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Milelik — Local AI Workspace</title>
+  <meta name="description" content="Milelik local AI assistant, coding workspace and APIs for linux Mint.">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">M</div>
+        <div>
+          <h1>Milelik</h1>
+          <p>Local AI workspace</p>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-line">
+          <span id="statusDot" class="status-dot checking" aria-hidden="true"></span>
+          <strong id="statusText">Checking local services…</strong>
+        </div>
+        <dl>
+          <div><dt>Model</dt><dd id="modelSummary">Not checked yet</dd></div>
+          <div><dt>Workspace</dt><dd id="workspaceSummary">Loading…</dd></div>
+        </dl>
+      </div>
+
+      <nav class="main-nav" aria-label="Milelik sections">
+        <button type="button" class="nav-button active" data-view="chat"><span aria-hidden="true">💬</span> Chat</button>
+        <button type="button" class="nav-button" data-view="workspace"><span aria-hidden="true">🧰</span> Workspace</button>
+        <button type="button" class="nav-button" data-view="apis"><span aria-hidden="true">🔌</span> APIs</button>
+        <button type="button" class="nav-button" data-view="settings"><span aria-hidden="true">⚙️</span> Preferences</button>
+      </nav>
+
+      <div class="sidebar-note">
+        <strong>Private by design</strong>
+        <p>Milelik talks to a model and tools on this device. Actions that change files, apps or GitHub ask for approval here first.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">linux Mint · local model · workspace</p>
+          <h2 id="pageTitle">Chat with Milelik</h2>
+        </div>
+        <div class="topbar-actions">
+          <span class="local-pill">127.0.0.1 local app</span>
+          <button id="refreshAllBtn" type="button" class="button secondary">↻ Refresh status</button>
+        </div>
+      </header>
+
+      <div id="connectionBanner" class="banner warning" hidden>
+        <strong>Connection token needed.</strong>
+        <span>Open Milelik from the terminal link, or paste the API token in Preferences → Connection.</span>
+      </div>
+
+      <!-- CHAT -->
+      <section id="view-chat" class="view active" aria-labelledby="pageTitle">
+        <div class="chat-layout">
+          <article class="card chat-card">
+            <div class="card-heading">
+              <div>
+                <h3>Ask Milelik to do something</h3>
+                <p>It can inspect this PC, use the network, open apps/VLC, and work with Git/GitHub.</p>
+              </div>
+              <button id="clearChatBtn" type="button" class="button ghost">Clear chat</button>
+            </div>
+
+            <div id="chatMessages" class="chat-messages" aria-live="polite">
+              <div class="empty-state">
+                <h4>Try one of these</h4>
+                <div class="quick-prompts">
+                  <button type="button" class="chip quick-prompt">What is my local IP, public IP, disk space and memory?</button>
+                  <button type="button" class="chip quick-prompt">Find the 10 biggest folders in my home directory</button>
+                  <button type="button" class="chip quick-prompt">What media apps are installed?</button>
+                  <button type="button" class="chip quick-prompt">Search GitHub for useful linux Mint Python tools</button>
+                  <button type="button" class="chip quick-prompt">Create a Python hello-world file in this workspace and explain it</button>
+                </div>
+              </div>
+            </div>
+
+            <form id="chatForm" class="chat-form">
+              <label class="sr-only" for="chatInput">Message for Milelik</label>
+              <textarea id="chatInput" rows="3" placeholder="Ask Milelik… e.g. play ~/Videos/demo.mp4 in VLC, or list open PRs in this repo"></textarea>
+              <div class="form-row">
+                <span id="chatBusy" class="hint">Press Enter to send · Shift+Enter for a new line</span>
+                <button id="sendChatBtn" type="submit" class="button primary">Send to Milelik</button>
+              </div>
+            </form>
+
+            <details class="logs">
+              <summary>Tool/run log from the last task</summary>
+              <pre id="runLog">No task has run yet.</pre>
+            </details>
+          </article>
+
+          <aside class="stack">
+            <article class="card">
+              <h3>What Milelik can use</h3>
+              <p class="muted">The same 26 tools are available in chat and through the local API.</p>
+              <div id="toolList" class="tool-list"><span class="muted">Loading tools…</span></div>
+            </article>
+            <article class="card safety-card">
+              <h3>Approvals stay with you</h3>
+              <p>When Milelik wants to run a command, write a file, launch an app or change GitHub, an approval dialog appears here. Dangerous actions still require typing <code>YES</code>.</p>
+              <button type="button" class="button secondary" data-goto-view="settings">Adjust safety preferences</button>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <!-- WORKSPACE -->
+      <section id="view-workspace" class="view" aria-labelledby="pageTitle">
+        <article class="card workspace-toolbar">
+          <div>
+            <h3>Your device workspace</h3>
+            <p class="muted">Root: <code id="workspaceRootLabel">Loading…</code></p>
+          </div>
+          <div class="button-row">
+            <button id="refreshWorkspaceBtn" type="button" class="button secondary">↻ Refresh files</button>
+            <button id="newFileBtn" type="button" class="button secondary">＋ New file</button>
+            <button id="newFolderBtn" type="button" class="button secondary">＋ New folder</button>
+          </div>
+        </article>
+
+        <article class="card clone-card">
+          <form id="cloneForm" class="inline-form">
+            <div class="grow">
+              <label for="cloneUrl">Clone a GitHub repository into this workspace</label>
+              <input id="cloneUrl" type="url" placeholder="https://github.com/owner/repository.git" autocomplete="off">
+            </div>
+            <div>
+              <label for="cloneDir">Folder name <span class="muted">(optional)</span></label>
+              <input id="cloneDir" type="text" placeholder="repository" autocomplete="off">
+            </div>
+            <button type="submit" class="button primary align-end">Clone here</button>
+          </form>
+          <p class="hint">Then open its files below, ask Milelik about it in Chat, or use a suggested run command. No separate GitHub download/ZIP step.</p>
+        </article>
+
+        <div class="workspace-layout">
+          <article class="card file-card">
+            <div class="card-heading compact"><h3>Files</h3></div>
+            <div id="fileTree" class="file-tree">Loading workspace…</div>
+            <div class="suggestions">
+              <h4>Suggested project commands</h4>
+              <div id="projectSuggestions" class="stack compact-stack"><span class="muted">No suggestions yet.</span></div>
+            </div>
+          </article>
+
+          <article class="card editor-card">
+            <div class="editor-toolbar">
+              <div class="grow">
+                <label for="currentFilePath">File path</label>
+                <input id="currentFilePath" type="text" value="examples/hello.py" spellcheck="false">
+              </div>
+              <div>
+                <label for="languageSelect">Language</label>
+                <select id="languageSelect">
+                  <option value="python">Python</option>
+                  <option value="bash">Bash</option>
+                  <option value="javascript">JavaScript</option>
+                  <option value="text">Text / Markdown</option>
+                  <option value="json">JSON</option>
+                  <option value="html">HTML</option>
+                  <option value="css">CSS</option>
+                  <option value="toml">TOML</option>
+                </select>
+              </div>
+            </div>
+
+            <label class="sr-only" for="codeEditor">Code editor</label>
+            <textarea id="codeEditor" class="code-editor" spellcheck="false">Loading file…</textarea>
+            <div class="editor-meta">
+              <span id="editorStatus" class="hint">No unsaved changes</span>
+              <span class="hint">Ctrl+S save · Ctrl+Enter save &amp; run</span>
+            </div>
+
+            <div class="button-row">
+              <button id="saveFileBtn" type="button" class="button primary">Save</button>
+              <button id="runFileBtn" type="button" class="button success">▶ Save &amp; run</button>
+              <button id="checkFileBtn" type="button" class="button secondary">Syntax check</button>
+              <button id="downloadFileBtn" type="button" class="button ghost">Download</button>
+              <button id="deleteFileBtn" type="button" class="button danger ghost-danger">Delete</button>
+            </div>
+
+            <label for="stdinInput">Input for the program <span class="muted">(optional, sent to stdin)</span></label>
+            <textarea id="stdinInput" rows="2" placeholder="Text your program can read with input()/readline"></textarea>
+
+            <form id="terminalForm" class="terminal-form">
+              <label for="terminalCommand">Run a command in the workspace</label>
+              <div class="terminal-row">
+                <span aria-hidden="true">$</span>
+                <input id="terminalCommand" type="text" placeholder="python3 -m unittest discover -s tests -v" autocomplete="off">
+                <button type="submit" class="button secondary">Run command</button>
+              </div>
+              <p class="hint">Commands run on this device as your user. Long-running servers should still be started in a terminal.</p>
+            </form>
+
+            <h4>Output console</h4>
+            <pre id="workspaceOutput" class="console-output">Choose a file and press “Save &amp; run”, or run a workspace command.</pre>
+          </article>
+        </div>
+      </section>
+
+      <!-- APIS -->
+      <section id="view-apis" class="view" aria-labelledby="pageTitle">
+        <article class="card hero-card">
+          <div>
+            <h3>Local APIs you can use in your own scripts</h3>
+            <p>Everything below is served by Milelik on this device. Send the connection token in the <code>X-Milelik-Token</code> header. The OpenAPI description is at <code>/api/openapi.json</code>.</p>
+          </div>
+          <pre class="curl-example">curl -H "X-Milelik-Token: YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"sqrt(3^2+4^2)"}' \
+  http://127.0.0.1:8765/api/math/evaluate</pre>
+        </article>
+
+        <div class="api-layout">
+          <div class="api-playgrounds">
+            <article class="card">
+              <h3>🧮 Mathematics</h3>
+              <form id="mathEvalForm" class="stack compact-stack">
+                <label for="mathExpression">Evaluate safely <span class="muted">(supports sqrt, sin, log, factorial, pi, e, tau)</span></label>
+                <div class="inline-fields">
+                  <input id="mathExpression" class="grow" value="sqrt(x^2 + 4^2) + 2*pi" autocomplete="off">
+                  <input id="mathVariables" value="{&quot;x&quot;: 3}" aria-label="Math variables JSON" autocomplete="off">
+                  <button class="button primary" type="submit">Calculate</button>
+                </div>
+              </form>
+              <form id="mathStatsForm" class="stack compact-stack spaced-top">
+                <label for="mathNumbers">Statistics for numbers</label>
+                <div class="inline-fields">
+                  <input id="mathNumbers" class="grow" value="4, 8, 15, 16, 23, 42" autocomplete="off">
+                  <button class="button secondary" type="submit">Analyse</button>
+                </div>
+              </form>
+              <form id="mathConvertForm" class="inline-fields spaced-top" aria-label="Unit converter">
+                <input id="convertValue" type="number" step="any" value="72" aria-label="Value to convert">
+                <select id="convertFrom" aria-label="Convert from unit"></select>
+                <span aria-hidden="true">→</span>
+                <select id="convertTo" aria-label="Convert to unit"></select>
+                <button class="button secondary" type="submit">Convert</button>
+              </form>
+              <form id="mathQuadraticForm" class="inline-fields spaced-top" aria-label="Quadratic solver">
+                <label>a <input id="quadA" type="number" step="any" value="1"></label>
+                <label>b <input id="quadB" type="number" step="any" value="-3"></label>
+                <label>c <input id="quadC" type="number" step="any" value="2"></label>
+                <button class="button secondary" type="submit">Solve quadratic</button>
+              </form>
+              <pre id="mathResult" class="result-box">Math results will appear here.</pre>
+            </article>
+
+            <article class="card">
+              <h3>💻 Coding helpers</h3>
+              <form id="snippetForm" class="stack compact-stack">
+                <div class="inline-fields">
+                  <label>Language
+                    <select id="snippetLanguage">
+                      <option value="python">Python</option>
+                      <option value="bash">Bash</option>
+                      <option value="javascript">JavaScript</option>
+                    </select>
+                  </label>
+                  <button id="checkSnippetBtn" class="button secondary" type="button">Syntax check</button>
+                  <button class="button success" type="submit">Run snippet</button>
+                </div>
+                <textarea id="snippetCode" class="mini-editor" spellcheck="false">for n in range(1, 6):
+    print(n, n*n)</textarea>
+              </form>
+              <form id="regexForm" class="stack compact-stack spaced-top">
+                <label for="regexPattern">Regex tester</label>
+                <div class="inline-fields">
+                  <input id="regexPattern" class="grow" value="(\w+)@(\w+\.com)" autocomplete="off">
+                  <input id="regexFlags" value="i" size="4" aria-label="Regex flags">
+                </div>
+                <textarea id="regexText" rows="3">Contact ada@example.com or grace@example.com.</textarea>
+                <button class="button secondary" type="submit">Find matches</button>
+              </form>
+              <form id="encodeForm" class="stack compact-stack spaced-top">
+                <label for="encodeText">Encode / decode</label>
+                <div class="inline-fields">
+                  <select id="encodeOperation">
+                    <option value="base64_encode">Base64 encode</option>
+                    <option value="base64_decode">Base64 decode</option>
+                    <option value="url_encode">URL encode</option>
+                    <option value="url_decode">URL decode</option>
+                    <option value="html_escape">HTML escape</option>
+                    <option value="html_unescape">HTML unescape</option>
+                    <option value="hex_encode">Hex encode</option>
+                    <option value="hex_decode">Hex decode</option>
+                    <option value="json_format">Format JSON</option>
+                  </select>
+                  <button class="button secondary" type="submit">Transform</button>
+                </div>
+                <textarea id="encodeText" rows="3">Milelik local APIs</textarea>
+              </form>
+              <pre id="codingResult" class="result-box">Coding results will appear here.</pre>
+            </article>
+
+            <article class="card">
+              <h3>🧰 Everyday utilities</h3>
+              <form id="textUtilityForm" class="stack compact-stack">
+                <div class="inline-fields">
+                  <select id="textOperation">
+                    <option value="stats">Text statistics</option>
+                    <option value="uppercase">UPPERCASE</option>
+                    <option value="lowercase">lowercase</option>
+                    <option value="title">Title Case</option>
+                    <option value="slugify">Slugify</option>
+                    <option value="reverse">Reverse</option>
+                    <option value="word_frequencies">Word frequencies</option>
+                  </select>
+                  <button class="button secondary" type="submit">Run text utility</button>
+                </div>
+                <textarea id="textUtilityInput" rows="3">Milelik makes local AI, coding and mathematics easier.</textarea>
+              </form>
+              <form id="hashForm" class="inline-fields spaced-top">
+                <select id="hashAlgorithm">
+                  <option>sha256</option><option>sha512</option><option>sha1</option><option>md5</option><option>blake2b</option>
+                </select>
+                <input id="hashText" class="grow" value="Milelik" aria-label="Text to hash">
+                <button class="button secondary" type="submit">Hash</button>
+              </form>
+              <form id="passwordForm" class="inline-fields spaced-top">
+                <label>Length <input id="passwordLength" type="number" value="20" min="8" max="128"></label>
+                <label class="checkbox-label"><input id="passwordSymbols" type="checkbox" checked> Symbols</label>
+                <button class="button secondary" type="submit">Generate local password</button>
+                <button id="timeBtn" class="button ghost" type="button">Current time API</button>
+              </form>
+              <pre id="utilityResult" class="result-box">Utility results will appear here.</pre>
+            </article>
+          </div>
+
+          <aside class="stack api-side">
+            <article class="card">
+              <div class="card-heading compact">
+                <h3>Endpoint catalogue</h3>
+                <span class="badge" id="endpointCount">…</span>
+              </div>
+              <label class="sr-only" for="apiSearch">Search APIs</label>
+              <input id="apiSearch" type="search" placeholder="Search coding, math, workspace…">
+              <div id="endpointList" class="endpoint-list">Loading API catalogue…</div>
+            </article>
+
+            <article class="card">
+              <h3>Generic API tester</h3>
+              <form id="genericApiForm" class="stack compact-stack">
+                <div class="inline-fields">
+                  <select id="apiMethod">
+                    <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+                  </select>
+                  <input id="apiPath" class="grow" value="/api/status" autocomplete="off">
+                </div>
+                <label for="apiBody">JSON body <span class="muted">(not used for GET)</span></label>
+                <textarea id="apiBody" rows="6" spellcheck="false">{}</textarea>
+                <button class="button primary" type="submit">Send request</button>
+              </form>
+              <pre id="apiResult" class="result-box">API responses will appear here.</pre>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view" aria-labelledby="pageTitle">
+        <form id="settingsForm" class="settings-grid">
+          <article class="card">
+            <h3>🤖 Model preferences</h3>
+            <p class="muted">These are saved in <code>~/.config/milelik/config.json</code> and used by both the CLI and this front end.</p>
+            <label for="set-model">Model</label>
+            <input id="set-model" list="modelOptions" autocomplete="off">
+            <datalist id="modelOptions"></datalist>
+
+            <label for="set-backend">Model server</label>
+            <select id="set-backend">
+              <option value="auto">Automatic — Ollama, LM Studio or llama.cpp</option>
+              <option value="ollama">Ollama only</option>
+              <option value="openai">LM Studio / llama.cpp (OpenAI-compatible)</option>
+            </select>
+
+            <label for="set-host">Model server address <span class="muted">(blank = auto-detect)</span></label>
+            <input id="set-host" placeholder="http://127.0.0.1:1234" autocomplete="off">
+
+            <div class="two-cols">
+              <div>
+                <label for="set-ctx">Context tokens</label>
+                <input id="set-ctx" type="number" min="1024" max="131072" step="1024">
+              </div>
+              <div>
+                <label for="set-max-steps">Maximum tool steps</label>
+                <input id="set-max-steps" type="number" min="1" max="50">
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>🛡️ Safety and performance</h3>
+            <label class="checkbox-card">
+              <input id="set-auto" type="checkbox">
+              <span><strong>Auto-approve ordinary actions</strong><br>
+              <span class="muted">Commands/files/app launches run without asking. Dangerous and sudo actions still ask.</span></span>
+            </label>
+
+            <label for="set-cmd-timeout">Command timeout (seconds)</label>
+            <input id="set-cmd-timeout" type="number" min="5" max="900">
+
+            <div class="preference-explainer">
+              <strong>Recommended</strong>
+              <p>Leave auto-approve off until you trust your model and setup. You can approve each action in this browser instead of switching back to a terminal.</p>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>🧰 Front end and workspace</h3>
+            <label for="set-workspace">Workspace folder</label>
+            <input id="set-workspace" autocomplete="off">
+
+            <div class="two-cols">
+              <div>
+                <label for="set-web-host">Web bind address</label>
+                <input id="set-web-host" autocomplete="off">
+              </div>
+              <div>
+                <label for="set-web-port">Web port</label>
+                <input id="set-web-port" type="number" min="1" max="65535">
+              </div>
+            </div>
+            <p class="hint">Keep 127.0.0.1 unless you intentionally want LAN access. Web address changes apply next time the front end starts.</p>
+
+            <div class="two-cols">
+              <div>
+                <label for="set-ui-theme">Theme</label>
+                <select id="set-ui-theme">
+                  <option value="system">Match system</option>
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </div>
+              <div>
+                <label for="set-ui-default-view">Opening page</label>
+                <select id="set-ui-default-view">
+                  <option value="chat">Chat</option>
+                  <option value="workspace">Workspace</option>
+                  <option value="apis">APIs</option>
+                  <option value="settings">Preferences</option>
+                </select>
+              </div>
+            </div>
+
+            <label class="checkbox-label"><input id="set-open-browser" type="checkbox"> Open my browser when Milelik starts</label>
+            <label class="checkbox-label"><input id="set-frontend-enabled" type="checkbox"> Keep the front end installed when reinstalling/updating</label>
+          </article>
+
+          <article class="card">
+            <h3>🔐 Connection</h3>
+            <p class="muted">The terminal startup link sets a secure browser cookie automatically. If you opened the page another way, paste the token printed by <code>milelik --gui</code>.</p>
+            <label for="tokenInput">API token</label>
+            <input id="tokenInput" type="password" autocomplete="off" placeholder="Only needed if this page cannot connect">
+            <div class="button-row">
+              <button id="saveTokenBtn" type="button" class="button secondary">Save token in this browser</button>
+              <button id="clearTokenBtn" type="button" class="button ghost">Clear saved token</button>
+            </div>
+            <p class="hint">Treat the token like a password: APIs can run code on this device.</p>
+          </article>
+
+          <div class="settings-actions card">
+            <div>
+              <h3>Save preferences</h3>
+              <p id="settingsStatus" class="muted">Changes are not saved until you press the button.</p>
+            </div>
+            <button class="button primary large" type="submit">Save all preferences</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="approvalModal" class="modal-backdrop" hidden role="presentation">
+    <section class="modal" role="alertdialog" aria-modal="true" aria-labelledby="approvalTitle" aria-describedby="approvalDetail">
+      <p class="eyebrow">Milelik needs your permission</p>
+      <h2 id="approvalTitle">Allow this action?</h2>
+      <p id="approvalAction" class="approval-action"></p>
+      <pre id="approvalDetail" class="approval-detail"></pre>
+      <p id="approvalMeta" class="hint"></p>
+      <div id="approvalYesWrap" hidden>
+        <label for="approvalTypedYes">This is marked dangerous. Type <code>YES</code> to enable approval:</label>
+        <input id="approvalTypedYes" autocomplete="off" placeholder="YES">
+      </div>
+      <div class="button-row modal-actions">
+        <button id="denyApprovalBtn" type="button" class="button danger">Deny</button>
+        <button id="approveApprovalBtn" type="button" class="button success">Approve</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
