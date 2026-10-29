@@ -212,8 +212,8 @@ def display_available(environ=None) -> bool:
 
 
 def load_sprite_asset(filename: str, root: Path = ROOT) -> str:
-    """Load one canonical SVG from frontend/sprites/."""
-    asset_path = root / "frontend" / "sprites" / Path(filename).name
+    """Load one canonical SVG from svg-images/."""
+    asset_path = root / "svg-images" / Path(filename).name
     try:
         return asset_path.read_text(encoding="utf-8")
     except OSError:
@@ -221,7 +221,7 @@ def load_sprite_asset(filename: str, root: Path = ROOT) -> str:
 
 
 def load_sprite_svg(root: Path = ROOT) -> str:
-    """Load Milelik's companion from the organized sprite folder."""
+    """Load Milelik's companion from the organized svg-images folder."""
     sprite_svg = load_sprite_asset(COMPANION_SPRITE_FILENAME, root)
     if sprite_svg:
         return sprite_svg
@@ -232,7 +232,7 @@ def load_sprite_svg(root: Path = ROOT) -> str:
 
 
 def load_app_icon_svg(root: Path = ROOT) -> str:
-    """Load Milelik's browser icon from the organized sprite folder."""
+    """Load Milelik's browser icon from the organized svg-images folder."""
     return load_sprite_asset(APP_ICON_FILENAME, root)
 
 
@@ -435,7 +435,7 @@ def render_browser_setup_page(token, defaults, records=None, selected=None,
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Set up Milelik</title>
-<link rel="icon" type="image/svg+xml" href="/sprites/milelik-icon.svg">
+<link rel="icon" type="image/svg+xml" href="/svg-images/milelik-icon.svg">
 <link rel="stylesheet" href="/styles.css">
 <style>
 .setup-shell { width: min(1180px, calc(100vw - 28px)); margin: 0 auto; padding: 26px 0 44px; }
@@ -467,7 +467,7 @@ def render_browser_setup_page(token, defaults, records=None, selected=None,
         </div>
       </section>
       <p class="setup-note">This page is served only on this computer. Installation still uses Milelik's bundled installer; linux may ask for your password in the terminal that launched setup when system packages are installed.</p>
-      <p class="setup-note">No raster sprite images are used: Milelik's companion and icon are SVG files from the organized frontend/sprites folder.</p>
+      <p class="setup-note">No raster sprite images are used: Milelik's companion and icon are SVG files from the organized svg-images folder.</p>
     </aside>
     <form class="setup-form" method="post" action="/setup">
       <input type="hidden" name="token" value="__TOKEN__">
@@ -617,7 +617,7 @@ def render_browser_setup_progress(token, sprite_svg=""):
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Milelik setup</title>
-<link rel="icon" type="image/svg+xml" href="/sprites/milelik-icon.svg">
+<link rel="icon" type="image/svg+xml" href="/svg-images/milelik-icon.svg">
 <link rel="stylesheet" href="/styles.css">
 <style>.setup-shell{width:min(720px,calc(100vw - 28px));margin:0 auto;padding:28px 0}.setup-card{border:1px solid var(--border);background:var(--panel);padding:20px;margin-top:16px}</style>
 </head><body><main class="setup-shell">
@@ -747,7 +747,8 @@ def start_browser_setup(args, core=None, root: Path = ROOT, browser_open=None,
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
             query = urllib.parse.parse_qs(parsed.query)
-            if path in ("/sprites/milelik-icon.svg", "/favicon.svg",
+            if path in ("/svg-images/milelik-icon.svg",
+                        "/sprites/milelik-icon.svg", "/favicon.svg",
                         "/favicon.ico"):
                 if session.icon_svg:
                     self._send(session.icon_svg,

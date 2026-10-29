@@ -1201,6 +1201,7 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn("run_setup_wizard", installer)
         self.assertIn("Step 5 of 7 — browser front end and workspace", installer)
         self.assertIn('shutil.copytree(root / "frontend"', installer)
+        self.assertIn('_replace_tree(root / "svg-images"', installer)
         self.assertIn('"app.py"', installer)
         self.assertIn('"milelik_web.py"', installer)
         self.assertIn("milelik-web", installer)

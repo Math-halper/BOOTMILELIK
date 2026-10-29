@@ -290,10 +290,10 @@ The front end has four pages:
   lets you select one immediately, and includes a **Rescan models folder**
   button.
 
-The sidebar includes Milelik's original black-and-white angular glitch
-companion sprite and speech plate. All visual sprite artwork is organized as
-**SVG only** in [`frontend/sprites/`](frontend/sprites/): the companion and
-browser icon live there, and the front end/browser setup do not use
+The sidebar includes Milelik's original black-and-white monitor-cat
+companion sprite and speech plate. Every project SVG image is organized in
+[`svg-images/`](svg-images/): the companion and browser icon live there, and
+the front end/browser setup do not use
 PNG/JPG/GIF/WebP sprite images. It idles, blinks, thinks, talks, glitches on
 errors, alerts during approval prompts, and sleeps when the model backend is
 unavailable.
@@ -527,8 +527,8 @@ Python dependencies are deliberately empty (`requirements.txt` and
 `pyproject.toml` declare none). System dependencies are version-controlled
 as apt manifests in `dependencies/`; `install_dependencies.py` installs or
 checks them, and `install_milelik.py` copies the manifests, dependency
-installer, `app.py`, `milelik_web.py`, `frontend/` and a preserved `models/`
-folder beside the installed `milelik.py`. Repository model files are hard-linked/symlinked into
+installer, `app.py`, `milelik_web.py`, `frontend/`, `svg-images/` and a
+preserved `models/` folder beside the installed `milelik.py`. Repository model files are hard-linked/symlinked into
 the installed `models/` folder when needed instead of being copied again. Apt
 supplies the signed distribution binaries and transitive libraries for the
 user's Mint release, while the browser setup front end lives in

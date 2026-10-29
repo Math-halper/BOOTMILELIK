@@ -1,7 +1,7 @@
-# Milelik visual sprites
+# Milelik SVG images
 
-All of Milelik's project-owned sprite and icon artwork lives in this folder.
-Keep new visual sprites here, use SVG only, and give each file a descriptive
+All of Milelik's project-owned SVG artwork lives in this folder.
+Keep every new SVG image here and give each file a descriptive
 `milelik-*.svg` name.
 
 | File | Used for |

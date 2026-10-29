@@ -986,6 +986,9 @@ def install_files(options: InstallerOptions, *, root: Path = ROOT,
     if options.frontend_enabled and (root / "frontend").is_dir():
         shutil.copytree(root / "frontend", frontend_dest, symlinks=True)
 
+    if (root / "svg-images").is_dir():
+        _replace_tree(root / "svg-images", app_dir / "svg-images")
+
     models_dest = app_dir / "models"
     models_dest.mkdir(parents=True, exist_ok=True)
     for extra in ("README.md", ".gitkeep", "LICENSE-SmolLM2-Apache-2.0.txt"):

@@ -54,8 +54,9 @@ except Exception:  # pragma: no cover - run_server can be given a core module.
 
 APP_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = APP_DIR / "frontend"
-COMPANION_SPRITE_FILE = "sprites/milelik-companion.svg"
-APP_ICON_FILE = "sprites/milelik-icon.svg"
+SVG_IMAGES_DIR = APP_DIR / "svg-images"
+COMPANION_SPRITE_FILE = "milelik-companion.svg"
+APP_ICON_FILE = "milelik-icon.svg"
 COMPANION_SPRITE_PLACEHOLDER = "<!-- MILELIK_COMPANION_SPRITE -->"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -785,6 +786,7 @@ class WebState:
         self.token = token or os.environ.get("MILELIK_WEB_TOKEN") or secrets.token_urlsafe(24)
         self.workspace = Workspace(workspace)
         self.frontend_dir = FRONTEND_DIR
+        self.svg_images_dir = SVG_IMAGES_DIR
         self.bound_host = DEFAULT_HOST
         self.bound_port = DEFAULT_PORT
         self.verbose = False
@@ -1557,10 +1559,10 @@ class MilelikHandler(BaseHTTPRequestHandler):
             raise ApiError("The JSON request body must be an object.")
         return data
 
-    def _serve_static(self, filename: str):
-        path = self.state.frontend_dir / filename
+    def _serve_static(self, filename: str, directory: Path | None = None):
+        path = (directory or self.state.frontend_dir) / filename
         if not path.is_file():
-            raise ApiError("Milelik's front-end files are missing. Re-run python3 setup_milelik.py.", 500)
+            raise ApiError("Milelik's web files are missing. Re-run python3 setup_milelik.py.", 500)
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in ("application/javascript", "text/javascript"):
             content_type += "; charset=utf-8"
@@ -1568,16 +1570,16 @@ class MilelikHandler(BaseHTTPRequestHandler):
                          extra_headers={"Cache-Control": "no-cache"})
 
     def _serve_index(self):
-        """Serve the app with its companion sprite inlined from sprites/.
+        """Serve the app with its companion sprite inlined from svg-images/.
 
-        The canonical artwork stays in frontend/sprites/. Inlining the SVG
-        here preserves the CSS selectors that animate the sprite's eye,
-        mouth and glitch bars for each companion state.
+        The canonical artwork stays in svg-images/. Inlining the SVG here
+        preserves the CSS selectors that animate the sprite's eyes, mouth
+        and pixel accents for each companion state.
         """
         index_path = self.state.frontend_dir / "index.html"
-        sprite_path = self.state.frontend_dir / COMPANION_SPRITE_FILE
+        sprite_path = self.state.svg_images_dir / COMPANION_SPRITE_FILE
         if not index_path.is_file() or not sprite_path.is_file():
-            raise ApiError("Milelik's front-end files are missing. Re-run python3 setup_milelik.py.", 500)
+            raise ApiError("Milelik's web files are missing. Re-run python3 setup_milelik.py.", 500)
         page = index_path.read_text(encoding="utf-8")
         if COMPANION_SPRITE_PLACEHOLDER not in page:
             raise ApiError("Milelik's companion sprite placeholder is missing.", 500)
@@ -1610,18 +1612,26 @@ class MilelikHandler(BaseHTTPRequestHandler):
             static_files = {
                 "/styles.css": "styles.css",
                 "/app.js": "app.js",
-                "/sprites/milelik-companion.svg": COMPANION_SPRITE_FILE,
-                "/sprites/milelik-icon.svg": APP_ICON_FILE,
-                # Compatibility alias for older bookmarks/cache entries.
-                "/favicon.svg": APP_ICON_FILE,
             }
             if path in static_files:
                 self._serve_static(static_files[path])
                 return
+            svg_files = {
+                "/svg-images/milelik-companion.svg": COMPANION_SPRITE_FILE,
+                "/svg-images/milelik-icon.svg": APP_ICON_FILE,
+                # Compatibility aliases for the previous sprite URLs and for
+                # older bookmarks/cache entries.
+                "/sprites/milelik-companion.svg": COMPANION_SPRITE_FILE,
+                "/sprites/milelik-icon.svg": APP_ICON_FILE,
+                "/favicon.svg": APP_ICON_FILE,
+            }
+            if path in svg_files:
+                self._serve_static(svg_files[path], self.state.svg_images_dir)
+                return
             if path == "/favicon.ico":
                 # Browsers may still ask for the legacy name; Milelik only
                 # ships SVG artwork, so return the organized SVG icon.
-                self._serve_static(APP_ICON_FILE)
+                self._serve_static(APP_ICON_FILE, self.state.svg_images_dir)
                 return
             if path == "/api/health":
                 self._send_json({"ok": True, "service": "milelik",

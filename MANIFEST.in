@@ -1,4 +1,5 @@
 graft frontend
+graft svg-images
 graft dependencies
 graft docs
 include models/README.md models/.gitkeep models/LICENSE-SmolLM2-Apache-2.0.txt
