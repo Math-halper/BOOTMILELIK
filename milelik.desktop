@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Milelik
+Comment=Fast local AI assistant (shell + web tools, local Qwen2.5-Coder model via Ollama/LM Studio/llama.cpp)
+Exec=milelik --interactive
+Terminal=true
+Icon=utilities-terminal
+Categories=Utility;System;
