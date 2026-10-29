@@ -71,26 +71,33 @@ and the startup `models/` inventory in `local_models`:
 ```json
 {
   "backend": "ollama",
-  "models": ["milelik-coder:7b"],
+  "models": ["milelik-smollm2:135m"],
   "local_models": {
     "directories": ["/home/you/.local/share/milelik/models"],
     "runnable_count": 1,
     "selected": {
-      "name": "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf",
+      "name": "smollm2-135m-instruct-q4_1.gguf",
       "supported": true,
-      "ollama_name": "milelik-coder:7b"
+      "ollama_name": "milelik-smollm2:135m",
+      "is_bundled_default": true,
+      "is_default": true
     },
     "files": []
   }
 }
 ```
 
+Each model record also includes `is_qwen25_coder`, `is_bundled_default` and
+`is_default` flags. On a fresh configuration, Milelik's bundled
+`smollm2-135m-instruct-q4_1.gguf` is the default; Qwen and other discovered
+GGUFs remain selectable.
+
 Choose a discovered file by id, path, filename, stem or generated Ollama
 name. Unsupported formats and incomplete split GGUFs are rejected:
 
 ```bash
 curl -H "X-Milelik-Token: TOKEN" -H "Content-Type: application/json" \
-  -d '{"model_file":"Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"}' \
+  -d '{"model_file":"smollm2-135m-instruct-q4_1.gguf"}' \
   http://127.0.0.1:8765/api/models/select
 
 # Use the configured/server model again:

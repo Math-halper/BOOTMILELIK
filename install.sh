@@ -17,12 +17,16 @@
 # automatically by dependencies/install-dependencies.sh.
 set -euo pipefail
 
+BUNDLED_MODEL_FILE="smollm2-135m-instruct-q4_1.gguf"
+BUNDLED_MODEL_LABEL="SmolLM2-135M-Instruct-Q4_1"
+BUNDLED_OLLAMA_MODEL="milelik-smollm2:135m"
+# Optional larger coder upgrade (still fully supported when selected).
 TARGET_OLLAMA_MODEL="huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M"
 TARGET_MODEL_LABEL="Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M"
 
 MODEL_WAS_SET=0
 [ -n "${MODEL:-}" ] && MODEL_WAS_SET=1
-MODEL="${MODEL:-$TARGET_OLLAMA_MODEL}"
+MODEL="${MODEL:-$BUNDLED_OLLAMA_MODEL}"
 GGUF="${GGUF:-}"
 MODEL_SOURCE="${MODEL_SOURCE:-auto}"
 BACKEND="${BACKEND:-auto}"
@@ -169,6 +173,8 @@ MODEL_DISCOVERY="$(bool_value "$MODEL_DISCOVERY")"
 if [ -n "$GGUF" ] && [ "$MODEL_SOURCE" = "auto" ]; then
     MODEL_SOURCE="gguf"
 elif [ "$MODEL_SOURCE" = "auto" ] && [ "$MODEL_WAS_SET" = "1" ] && \
+     [ "$MODEL" != "$BUNDLED_OLLAMA_MODEL" ] && [ "$MODEL" != "$BUNDLED_MODEL_LABEL" ] && \
+     [ "$MODEL" != "$BUNDLED_MODEL_FILE" ] && \
      [ "$MODEL" != "$TARGET_OLLAMA_MODEL" ] && [ "$MODEL" != "$TARGET_MODEL_LABEL" ]; then
     MODEL_SOURCE="custom"
 fi
@@ -340,23 +346,23 @@ run_setup_wizard() {
 
     echo
     echo "Step 2 of 7 — your AI model"
-    ask_choice MODEL_SOURCE "How should Milelik get $TARGET_MODEL_LABEL?" "$MODEL_SOURCE" \
-        "auto|Automatic (recommended) — use a GGUF I find, otherwise download it into Ollama" \
-        "gguf|I already have the GGUF file — import that exact file into Ollama" \
-        "server|It is already loaded in LM Studio or llama.cpp — do not install another copy" \
-        "custom|Use a different Ollama model"
+    ask_choice MODEL_SOURCE "Which AI model should Milelik use by default?" "$MODEL_SOURCE" \
+        "auto|Bundled $BUNDLED_MODEL_LABEL (recommended) — already in models/, import it into Ollama" \
+        "gguf|I already have a GGUF file — import that exact file into Ollama" \
+        "server|A model is already loaded in LM Studio or llama.cpp — do not install another copy" \
+        "custom|Use a different Ollama model (for example the larger Qwen2.5-Coder)"
 
     case "$MODEL_SOURCE" in
         gguf)
             while true; do
-                ask_text GGUF "Path to Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf:" "${GGUF:-$HOME/Downloads/${TARGET_MODEL_LABEL}.gguf}"
+                ask_text GGUF "Path to your GGUF file:" "${GGUF:-$SCRIPT_DIR/models/$BUNDLED_MODEL_FILE}"
                 GGUF="$(expand_path "$GGUF")"
                 [ -f "$GGUF" ] && break
                 echo "  I can't find that file yet: $GGUF"
-                echo "  Check the path, or press Ctrl+C and choose Automatic instead."
+                echo "  Check the path, or press Ctrl+C and choose the bundled model instead."
             done
             BACKEND="ollama"
-            MODEL="$TARGET_OLLAMA_MODEL"
+            # The exact Ollama name is derived from the chosen file during import.
             ;;
         server)
             local server_kind="lmstudio"
@@ -371,7 +377,7 @@ run_setup_wizard() {
                 custom) ask_text MODEL_HOST "Model server URL:" "${MODEL_HOST:-http://127.0.0.1:1234}" ;;
             esac
             if [ "$MODEL_WAS_SET" = "0" ]; then
-                MODEL="$TARGET_MODEL_LABEL"
+                MODEL="smollm2-135m-instruct-q4_1"
             fi
             ask_text MODEL "Model name/id shown by that server:" "$MODEL"
             BACKEND="openai"
@@ -383,7 +389,8 @@ run_setup_wizard() {
             ;;
         auto)
             if [ "$MODEL_WAS_SET" = "0" ]; then
-                MODEL="$TARGET_OLLAMA_MODEL"
+                MODEL="$BUNDLED_OLLAMA_MODEL"
+                [ -z "$MODEL_FILE" ] && MODEL_FILE="$BUNDLED_MODEL_FILE"
             fi
             BACKEND="auto"
             ;;
@@ -603,14 +610,20 @@ PY
 
     GGUF_CANDIDATE="${GGUF:-}"
     if [ -z "$GGUF_CANDIDATE" ] && { [ "$MODEL_SOURCE" = "gguf" ] || \
-         { [ "$MODEL_SOURCE" = "auto" ] && [ "$MODEL_WAS_SET" = "0" ]; }; }; then
+         { [ "$MODEL_SOURCE" = "auto" ] && \
+           { [ "$MODEL_WAS_SET" = "0" ] || [ "$MODEL" = "$BUNDLED_OLLAMA_MODEL" ] || \
+             [ "$MODEL" = "$TARGET_OLLAMA_MODEL" ]; }; }; }; then
+        GGUF_PATTERN='*smollm2*135m*q4_1*.gguf'
+        if [ "$MODEL" = "$TARGET_OLLAMA_MODEL" ]; then
+            GGUF_PATTERN='*qwen2.5-coder*7b*abliterat*q4_k_m*.gguf'
+        fi
         for d in "$MODELS_DIR" "$SCRIPT_DIR/models" "$APP_DIR/models" \
                  "$PWD/models" "$SCRIPT_DIR" "$PWD" "$HOME/Downloads" \
                  "$HOME/models" "$HOME/Models" "$HOME/.lmstudio/models" \
                  "$HOME/.cache/lm-studio/models"; do
             [ -d "$d" ] || continue
             GGUF_CANDIDATE="$(find "$d" -maxdepth 6 \( -type f -o -type l \) \
-                -iname '*qwen2.5-coder*7b*abliterat*q4_k_m*.gguf' -print -quit \
+                -iname "$GGUF_PATTERN" -print -quit \
                 2>/dev/null || true)"
             [ -n "$GGUF_CANDIDATE" ] && break
         done
@@ -620,16 +633,28 @@ PY
         [ -z "$MODEL_FILE" ] && MODEL_FILE="$GGUF_CANDIDATE"
         echo "Found your GGUF: $GGUF_CANDIDATE"
         echo "Importing it (no download)…"
-        bash "$SCRIPT_DIR/setup-model.sh" "$GGUF_CANDIDATE"
-        MODEL="milelik-coder:7b"
+        MODEL="$(python3 - "$SCRIPT_DIR/milelik.py" "$GGUF_CANDIDATE" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("milelik", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+print(m.ollama_name_for_model_file(sys.argv[2]))
+PY
+)"
+        OLLAMA_NAME="$MODEL" bash "$SCRIPT_DIR/setup-model.sh" "$GGUF_CANDIDATE"
         BACKEND="ollama"
     elif [ "$MODEL_SOURCE" = "gguf" ]; then
         echo "No GGUF file was found to import." >&2
-        echo "Run the installer again and choose Automatic, or use:" >&2
-        echo "  GGUF=/path/to/${TARGET_MODEL_LABEL}.gguf ./install.sh" >&2
+        echo "Run the installer again and choose the bundled model, or use:" >&2
+        echo "  GGUF=/path/to/model.gguf ./install.sh" >&2
         exit 1
     else
-        echo "Downloading model '$MODEL' (first time only)…"
+        if [ "$MODEL" = "$BUNDLED_OLLAMA_MODEL" ]; then
+            echo "Bundled GGUF was not found; downloading SmolLM2 135M from Ollama…"
+            MODEL="smollm2:135m"
+        else
+            echo "Downloading model '$MODEL' (first time only)…"
+        fi
         ollama pull "$MODEL"
     fi
 else
@@ -667,7 +692,7 @@ fi
 # model files are hard-linked (or symlinked) rather than copied, to avoid
 # duplicating gigabytes.
 mkdir -p "$APP_DIR/models"
-for extra in README.md .gitkeep; do
+for extra in README.md .gitkeep LICENSE-SmolLM2-Apache-2.0.txt; do
     if [ -f "$SCRIPT_DIR/models/$extra" ]; then
         install -m 0644 "$SCRIPT_DIR/models/$extra" "$APP_DIR/models/$extra"
     fi

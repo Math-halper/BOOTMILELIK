@@ -7,9 +7,11 @@ dist/
 *.egg-info/
 
 # Local model weights dropped into models/ are data, not source code. They
-# are usually far too large for ordinary Git; track only the folder docs.
+# are usually far too large for ordinary Git; track only the folder docs and
+# Milelik's one small bundled default model below.
 models/*.gguf
 models/**/*.gguf
+!models/smollm2-135m-instruct-q4_1.gguf
 models/*.ggml
 models/**/*.ggml
 models/*.bin

@@ -188,7 +188,8 @@ class TestMilelikWebServer(unittest.TestCase):
     def test_frontend_and_authentication(self):
         status, page, _headers = self.request("/", token=None)
         self.assertEqual(status, 200)
-        self.assertIn("Milelik — Local AI Workspace", page)
+        self.assertIn("Milelik — Local Companion Workspace", page)
+        self.assertIn('id="spriteStage"', page)
         self.assertIn('id="chatForm"', page)
         self.assertIn('id="codeEditor"', page)
         self.assertIn('id="endpointList"', page)
@@ -295,8 +296,10 @@ class TestMilelikWebServer(unittest.TestCase):
         models_dir = Path(self.tmp.name) / "models"
         models_dir.mkdir()
         target = models_dir / core.TARGET_GGUF_FILENAME
+        bundled = models_dir / core.BUNDLED_MODEL_FILENAME
         other = models_dir / "Other-Model.gguf"
         target.write_bytes(b"GGUFtarget")
+        bundled.write_bytes(b"GGUFbundled")
         other.write_bytes(b"GGUFother")
         (models_dir / "weights.safetensors").write_bytes(b"123")
         self.server.state.models_dir_override = str(models_dir)
@@ -306,9 +309,16 @@ class TestMilelikWebServer(unittest.TestCase):
         self.assertEqual(status, 200, models)
         local = models["local_models"]
         self.assertIn(str(models_dir.resolve()), local["directories"])
-        self.assertEqual(local["runnable_count"], 2)
-        self.assertEqual({f["name"] for f in local["files"]}, {
-            target.name, other.name, "weights.safetensors"})
+        self.assertGreaterEqual(local["runnable_count"], 3)
+        self.assertTrue({
+            target.name, bundled.name, other.name, "weights.safetensors"
+        }.issubset({f["name"] for f in local["files"]}))
+        bundled_record = next(
+            f for f in local["files"] if f["name"] == bundled.name)
+        self.assertTrue(bundled_record["is_bundled_default"])
+        self.assertTrue(bundled_record["is_default"])
+        self.assertEqual(bundled_record["ollama_name"],
+                         core.BUNDLED_MODEL_OLLAMA_NAME)
 
         status, selected, _ = self.request(
             "/api/models/select", "POST", {"model_file": other.name})
@@ -429,6 +439,29 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
         if node is not None:
             self.assertEqual(node.returncode, 0, node.stderr)
 
+    def test_black_and_white_companion_sprite_is_wired(self):
+        html = (ROOT / "frontend" / "index.html").read_text()
+        js = (ROOT / "frontend" / "app.js").read_text()
+        css = (ROOT / "frontend" / "styles.css").read_text()
+
+        for needle in (
+            'id="spriteStage"', 'class="milelik-sprite"',
+            'id="spriteSpeech"', 'id="spriteStateLabel"',
+            "black-and-white angular glitch companion",
+            "SmolLM2 is bundled in models/",
+        ):
+            self.assertIn(needle, html)
+        self.assertIn("function setSpriteState", js)
+        for state in ('"thinking"', '"talking"', '"glitch"', '"alert"', '"sleep"'):
+            self.assertIn(state, js)
+        for needle in (
+            ".companion-card", ".sprite-stage", ".sprite-bubble",
+            '@keyframes sprite-glitch', '@keyframes sprite-blink',
+            'prefers-reduced-motion: reduce', "--bg: #050607",
+            "--text: #f2f2f0", "clip-path: polygon(14px 0",
+        ):
+            self.assertIn(needle, css)
+
     def test_scripted_installer_wizard_saves_preferences(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -478,6 +511,7 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             self.assertEqual(config["models_dir"], "")
             self.assertEqual(config["model_file"], "")
             self.assertTrue((home / ".local" / "share" / "milelik" / "models" / "README.md").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "models" / "LICENSE-SmolLM2-Apache-2.0.txt").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "app.js").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "setup_milelik.py").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-web").is_file())

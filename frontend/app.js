@@ -20,7 +20,29 @@ const state = {
   editorDirty: false,
   loadedWorkspace: false,
   localModels: null,
+  spriteTimer: null,
 };
+
+const SPRITE_STATES = new Set(["idle", "thinking", "talking", "glitch", "alert", "sleep"]);
+
+function setSpriteState(stateName, speech = "", holdMs = 0) {
+  const stage = $("#spriteStage");
+  if (!stage) return;
+  const next = SPRITE_STATES.has(stateName) ? stateName : "idle";
+  stage.dataset.state = next;
+  const label = $("#spriteStateLabel");
+  if (label) label.textContent = next.toUpperCase();
+  const bubble = $("#spriteSpeech");
+  if (bubble && speech) bubble.textContent = speech;
+  window.clearTimeout(state.spriteTimer);
+  if (holdMs > 0) {
+    state.spriteTimer = window.setTimeout(() => {
+      if (stage.dataset.state === next && !state.chatBusy && !state.activeApproval) {
+        setSpriteState("idle", "I am here. Ask me to inspect, build, calculate or run something.");
+      }
+    }, holdMs);
+  }
+}
 
 function savedToken() {
   try { return localStorage.getItem("milelikToken") || ""; } catch { return ""; }
@@ -38,6 +60,8 @@ function toast(message, isError = false, timeout = 4200) {
   box.textContent = message;
   box.classList.toggle("error", isError);
   box.hidden = false;
+  if (isError) setSpriteState("glitch", `Signal problem: ${message}`, 3200);
+  else if (!state.chatBusy) setSpriteState("talking", message, 2600);
   window.clearTimeout(toast._timer);
   toast._timer = window.setTimeout(() => { box.hidden = true; }, timeout);
 }
@@ -107,6 +131,13 @@ function showView(view) {
   $(`#view-${view}`).classList.add("active");
   $("#pageTitle").textContent = VIEW_TITLES[view];
   try { localStorage.setItem("milelikCurrentView", view); } catch { /* ignore */ }
+  const viewSpeech = {
+    chat: "I am listening. SmolLM2 is small, so one clear step at a time works best.",
+    workspace: "Workspace open. I can read, edit, run and debug files on this device.",
+    apis: "Local API bench open: coding, maths, system and utility endpoints are on this machine.",
+    settings: "Preferences plate open. The bundled model lives in models/smollm2-135m-instruct-q4_1.gguf.",
+  };
+  if (!state.chatBusy && !state.activeApproval) setSpriteState("idle", viewSpeech[view]);
   if (view === "workspace" && !state.loadedWorkspace) loadWorkspace().catch((e) => showError("#workspaceOutput", e));
   if (view === "apis" && !state.endpoints.length) loadApiDocs().catch((e) => showError("#apiResult", e));
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -217,6 +248,7 @@ async function refreshStatus() {
   const dot = $("#statusDot");
   dot.className = "status-dot checking";
   $("#statusText").textContent = "Checking local services…";
+  setSpriteState("thinking", "Checking the local model, workspace and tool signal...");
   try {
     const status = await api("/api/status");
     state.status = status;
@@ -241,11 +273,18 @@ async function refreshStatus() {
       code.textContent = tool;
       tools.append(code);
     }
+    if (available) {
+      const named = model.selected_model || model.configured_model || "Local model";
+      setSpriteState("talking", `${named} is awake locally. I am ready when you are.`, 3400);
+    } else {
+      setSpriteState("sleep", "I can open the workspace, but the model brain is asleep. Start Ollama or import the bundled GGUF.");
+    }
     return status;
   } catch (error) {
     dot.className = "status-dot bad";
     $("#statusText").textContent = "Could not connect to Milelik API";
     $("#modelSummary").textContent = errorText(error);
+    setSpriteState("glitch", `Connection glitch: ${errorText(error)}`);
     throw error;
   }
 }
@@ -302,8 +341,10 @@ async function pollApprovals() {
     const data = await api("/api/approvals");
     const approvals = data.approvals || [];
     if (!approvals.length) {
+      const hadApproval = Boolean(state.activeApproval);
       state.activeApproval = null;
       $("#approvalModal").hidden = true;
+      if (hadApproval && !state.chatBusy) setSpriteState("idle", "Approval cleared. I am back on standby.");
       return;
     }
     const approval = approvals[0];
@@ -320,6 +361,7 @@ async function pollApprovals() {
     $("#approvalTypedYes").value = "";
     $("#approvalModal").hidden = false;
     setApprovalButtonsEnabled();
+    setSpriteState("alert", `I need your permission before I ${approval.action}. Nothing runs until you decide.`);
     $("#denyApprovalBtn").focus();
   } catch {
     /* Status refresh will surface authentication/connection problems. */
@@ -341,6 +383,7 @@ async function decideApproval(approved) {
     });
     state.activeApproval = null;
     $("#approvalModal").hidden = true;
+    setSpriteState(state.chatBusy ? "thinking" : "idle", approved ? "Permission received. Continuing carefully." : "Understood. I stopped that action.");
     toast(approved ? "Action approved." : "Action denied.");
   } catch (error) {
     toast(errorText(error), true);
@@ -389,13 +432,17 @@ async function submitChat(event) {
   $("#sendChatBtn").disabled = true;
   $("#sendChatBtn").textContent = "Milelik is working…";
   $("#chatBusy").textContent = "Milelik is thinking. Approval dialogs may appear here.";
+  setSpriteState("thinking", `Thinking about: ${message.slice(0, 140)}`);
   startApprovalPolling();
   try {
     const result = await api("/api/chat", { method: "POST", body: { message } });
-    appendMessage("assistant", result.answer || "(No answer returned.)");
+    const answer = result.answer || "(No answer returned.)";
+    appendMessage("assistant", answer);
     $("#runLog").textContent = result.logs || "No tool log was returned for this task.";
+    setSpriteState("talking", answer.slice(0, 180) || "Done.", 4200);
   } catch (error) {
     appendMessage("assistant", `I could not complete that: ${errorText(error)}`, true);
+    setSpriteState("glitch", `I hit a glitch: ${errorText(error)}`, 4200);
   } finally {
     state.chatBusy = false;
     $("#sendChatBtn").disabled = false;
@@ -763,6 +810,11 @@ async function submitGenericApi(event) {
 function bindEvents() {
   $$(".nav-button").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
   $$("[data-goto-view]").forEach((button) => button.addEventListener("click", () => showView(button.dataset.gotoView)));
+  $("#spriteStage")?.addEventListener("click", () => {
+    showView("chat");
+    setSpriteState("talking", "I am awake. Tell me the next small, clear step.", 3200);
+    $("#chatInput")?.focus();
+  });
   $("#refreshAllBtn").addEventListener("click", async () => {
     try {
       await refreshStatus();

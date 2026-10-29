@@ -227,11 +227,37 @@ class TestAgainstFakeOllamaServer(unittest.TestCase):
 
 class TestTargetModelNames(unittest.TestCase):
     TARGET = "huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M"
+    BUNDLED = "milelik-smollm2:135m"
 
-    def test_default_model_is_the_target(self):
-        self.assertEqual(milelik.DEFAULT_MODEL, self.TARGET)
+    def test_default_model_is_bundled_smollm2(self):
+        self.assertEqual(milelik.__version__, "1.7.0")
+        self.assertEqual(milelik.DEFAULT_MODEL, self.BUNDLED)
+        self.assertEqual(milelik.DEFAULT_MODEL_FILE,
+                         "smollm2-135m-instruct-q4_1.gguf")
+        self.assertEqual(milelik.BUNDLED_MODEL_LABEL,
+                         "SmolLM2-135M-Instruct-Q4_1")
+        cfg = milelik.default_config()
+        self.assertEqual(cfg["model"], self.BUNDLED)
+        self.assertEqual(cfg["model_file"], milelik.BUNDLED_MODEL_FILENAME)
+        # Qwen remains a supported non-default model.
+        self.assertEqual(milelik.OLLAMA_TARGET_MODEL, self.TARGET)
         self.assertEqual(milelik.TARGET_GGUF_FILENAME,
                          "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf")
+
+    def test_bundled_aliases_resolve_to_import_name(self):
+        for alias in [
+            "milelik-smollm2:135m",
+            "SmolLM2-135M-Instruct-Q4_1",
+            "smollm2-135m-instruct-q4_1.gguf",
+            "smollm2-135m-instruct-q4_1",
+            "HuggingFaceTB/SmolLM2-135M-Instruct-GGUF:Q4_1",
+        ]:
+            self.assertEqual(milelik.resolve_ollama_model_name(alias),
+                             self.BUNDLED, alias)
+            self.assertTrue(milelik.is_bundled_default_model(alias), alias)
+        # The separate Ollama-library build keeps its own id.
+        self.assertEqual(milelik.resolve_ollama_model_name("smollm2:135m"),
+                         "smollm2:135m")
 
     def test_all_aliases_resolve_to_ollama_tag(self):
         for alias in [
@@ -256,14 +282,22 @@ class TestTargetModelNames(unittest.TestCase):
 
     def test_find_model_match_in_server_ids(self):
         lmstudio_ids = ["llama-3.1-8b-instruct",
+                        "smollm2-135m-instruct-q4_1",
                         "qwen2.5-coder-7b-instruct-abliterated-q4_k_m"]
+        self.assertEqual(
+            milelik.find_model_match(milelik.DEFAULT_MODEL, lmstudio_ids),
+            "smollm2-135m-instruct-q4_1")
         self.assertEqual(
             milelik.find_model_match(milelik.TARGET_MODEL_LABEL, lmstudio_ids),
             "qwen2.5-coder-7b-instruct-abliterated-q4_k_m")
-        llama_cpp_ids = ["/home/user/models/" + milelik.TARGET_GGUF_FILENAME]
+        llama_cpp_ids = ["/home/user/models/" + milelik.BUNDLED_MODEL_FILENAME]
         self.assertEqual(
             milelik.find_model_match(milelik.DEFAULT_MODEL, llama_cpp_ids),
             llama_cpp_ids[0])
+        qwen_ids = ["/home/user/models/" + milelik.TARGET_GGUF_FILENAME]
+        self.assertEqual(
+            milelik.find_model_match(milelik.OLLAMA_TARGET_MODEL, qwen_ids),
+            qwen_ids[0])
         self.assertIsNone(milelik.find_model_match(
             milelik.TARGET_MODEL_LABEL, ["some/other-model:latest"]))
 
@@ -305,6 +339,13 @@ class TestQwenToolFormats(unittest.TestCase):
     def test_system_prompt_teaches_qwen_format(self):
         prompt = milelik.build_system_prompt(milelik.Toolbox(auto=True),
                                              milelik.TARGET_MODEL_LABEL)
+        self.assertIn("<tool_call>", prompt)
+        self.assertIn("ONE tool at a time", prompt)
+        self.assertIn('"name": "run_command"', prompt)
+
+    def test_system_prompt_keeps_bundled_model_to_one_tool(self):
+        prompt = milelik.build_system_prompt(milelik.Toolbox(auto=True),
+                                             milelik.DEFAULT_MODEL)
         self.assertIn("<tool_call>", prompt)
         self.assertIn("ONE tool at a time", prompt)
         self.assertIn('"name": "run_command"', prompt)
@@ -549,6 +590,30 @@ class TestLocalModelFiles(unittest.TestCase):
             # The symlink points at the same physical file and is de-duplicated.
             self.assertEqual(
                 sum(1 for r in records if r["stem"].startswith("Other-")), 1)
+
+    def test_repository_bundled_model_is_the_default_record(self):
+        bundled = ROOT / "models" / milelik.BUNDLED_MODEL_FILENAME
+        self.assertTrue(bundled.is_file(), "bundled default GGUF is missing")
+        self.assertEqual(bundled.stat().st_size, 98_362_432)
+        record = milelik.model_file_record_for_path(bundled)
+        self.assertTrue(record["supported"])
+        self.assertTrue(record["is_bundled_default"])
+        self.assertTrue(record["is_default"])
+        self.assertEqual(record["ollama_name"], milelik.BUNDLED_MODEL_OLLAMA_NAME)
+        self.assertEqual(record["architecture"], "llama")
+        license_text = (ROOT / "models" / "LICENSE-SmolLM2-Apache-2.0.txt").read_text()
+        self.assertIn("SmolLM2-135M-Instruct-Q4_1 model weights only", license_text)
+        self.assertIn("Apache License", license_text)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_gguf(root / milelik.TARGET_GGUF_FILENAME, b"qwen")
+            self._write_gguf(root / milelik.BUNDLED_MODEL_FILENAME, b"smol")
+            records = milelik.discover_model_files([root])
+            self.assertEqual(records[0]["name"], milelik.BUNDLED_MODEL_FILENAME)
+            chosen = milelik.choose_model_file(
+                records, configured_model=milelik.DEFAULT_MODEL)
+            self.assertEqual(chosen["name"], milelik.BUNDLED_MODEL_FILENAME)
 
     def test_gguf_metadata_is_read_without_loading_weights(self):
         import struct
@@ -1144,6 +1209,12 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn('bash "$SCRIPT_DIR/setup-model.sh"', installer)
         self.assertIn('python3 "$APP_DIR/milelik.py" --check', installer)
         self.assertIn('MILELIK_ALLOW_ROOT', installer)
+        self.assertIn('BUNDLED_MODEL_FILE="smollm2-135m-instruct-q4_1.gguf"', installer)
+        self.assertIn('BUNDLED_OLLAMA_MODEL="milelik-smollm2:135m"', installer)
+        self.assertIn('LICENSE-SmolLM2-Apache-2.0.txt', installer)
+        model_setup = (ROOT / "setup-model.sh").read_text()
+        self.assertIn('TARGET_FILE="smollm2-135m-instruct-q4_1.gguf"', model_setup)
+        self.assertIn('OLLAMA_LIBRARY_MODEL="smollm2:135m"', model_setup)
 
 
 if __name__ == "__main__":

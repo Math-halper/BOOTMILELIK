@@ -719,7 +719,7 @@ API_CATALOG = [
     {"method": "GET", "path": "/api/health", "category": "System", "description": "Check that the local API is running.", "example": {}},
     {"method": "GET", "path": "/api/status", "category": "System", "description": "Model, backend, workspace and helper status.", "example": {}},
     {"method": "GET", "path": "/api/models", "category": "Models", "description": "List backend models and all AI model files discovered in Milelik's models/ folders.", "example": {}},
-    {"method": "POST", "path": "/api/models/select", "category": "Models", "description": "Choose a local model file by id, filename, path or Ollama name; send {} or model_file=\"\" to use the configured server model.", "example": {"model_file": "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"}},
+    {"method": "POST", "path": "/api/models/select", "category": "Models", "description": "Choose a local model file by id, filename, path or Ollama name; send {} or model_file=\"\" to use the configured server model.", "example": {"model_file": "smollm2-135m-instruct-q4_1.gguf"}},
     {"method": "POST", "path": "/api/chat", "category": "AI", "description": "Send a task to Milelik's local model and its tools.", "example": {"message": "What is my disk space and local IP?"}},
     {"method": "POST", "path": "/api/tools/run", "category": "AI tools", "description": "Call one of Milelik's 26 tools directly.", "example": {"tool": "system_info", "arguments": {}}},
     {"method": "GET", "path": "/api/workspace", "category": "Workspace", "description": "Get the workspace tree and project run suggestions.", "example": {}},

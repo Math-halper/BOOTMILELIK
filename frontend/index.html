@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Milelik — Local AI Workspace</title>
-  <meta name="description" content="Milelik local AI assistant, coding workspace and APIs for linux Mint.">
+  <title>Milelik — Local Companion Workspace</title>
+  <meta name="description" content="Milelik local AI companion, coding workspace and APIs for linux Mint, with bundled SmolLM2.">
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -15,9 +15,55 @@
         <div class="brand-mark" aria-hidden="true">M</div>
         <div>
           <h1>Milelik</h1>
-          <p>Local AI workspace</p>
+          <p>Local companion workspace</p>
         </div>
       </div>
+
+      <section class="companion-card" aria-labelledby="companionTitle">
+        <div class="companion-topline">
+          <span id="companionTitle">MILELIK.SPRITE</span>
+          <span id="spriteStateLabel">BOOT</span>
+        </div>
+        <button id="spriteStage" class="sprite-stage" type="button" data-state="idle" aria-label="Wake Milelik companion and go to chat">
+          <svg class="milelik-sprite" viewBox="0 0 260 340" role="img" aria-labelledby="spriteTitle spriteDesc" focusable="false">
+            <title id="spriteTitle">Milelik companion sprite</title>
+            <desc id="spriteDesc">An original black-and-white angular glitch companion with wild shard hair and long limbs.</desc>
+            <g class="sprite-glitch-bars" aria-hidden="true">
+              <rect x="34" y="74" width="42" height="5"></rect>
+              <rect x="184" y="112" width="50" height="4"></rect>
+              <rect x="54" y="218" width="34" height="4"></rect>
+              <rect x="176" y="254" width="42" height="5"></rect>
+            </g>
+            <g class="sprite-figure">
+              <path class="sprite-hair" d="M128 16 L151 47 L186 20 L179 62 L226 46 L199 89 L240 105 L197 123 L216 168 L175 140 L169 192 L139 146 L111 190 L101 138 L61 172 L70 120 L20 104 L61 88 L42 44 L84 65 L92 22 L112 57 Z"></path>
+              <path class="sprite-hair-shard dark" d="M79 76 L112 91 L88 124 L64 103 Z"></path>
+              <path class="sprite-hair-shard dark" d="M158 72 L196 83 L174 116 L150 99 Z"></path>
+              <path class="sprite-hair-shard light" d="M112 55 L132 78 L116 98 L99 72 Z"></path>
+              <path class="sprite-arm left" d="M112 164 L91 190 L55 220 L43 214 L82 178 L103 154 Z"></path>
+              <path class="sprite-hand left" d="M51 215 L34 207 M52 220 L32 221 M55 225 L39 236 M61 226 L51 243"></path>
+              <path class="sprite-arm right" d="M158 164 L178 194 L194 229 L182 235 L158 198 L146 171 Z"></path>
+              <path class="sprite-hand right" d="M186 230 L181 250 M191 231 L193 252 M197 228 L207 246"></path>
+              <path class="sprite-torso light" d="M112 157 L137 149 L133 228 L103 205 Z"></path>
+              <path class="sprite-torso dark" d="M137 149 L161 164 L151 231 L133 228 Z"></path>
+              <path class="sprite-waist" d="M105 205 L151 231 L144 248 L111 226 Z"></path>
+              <path class="sprite-leg light" d="M113 226 L132 238 L116 326 L96 318 L103 254 Z"></path>
+              <path class="sprite-leg dark" d="M133 238 L150 232 L184 306 L199 326 L169 324 L139 263 Z"></path>
+              <path class="sprite-face" d="M104 107 L151 99 L159 132 L132 161 L108 140 Z"></path>
+              <g class="sprite-eye">
+                <path d="M115 121 L145 117 L141 130 L118 132 Z"></path>
+                <rect x="127" y="121" width="7" height="7"></rect>
+              </g>
+              <rect class="sprite-mouth" x="126" y="143" width="18" height="4"></rect>
+              <path class="sprite-necklace" d="M119 151 L137 166 L151 151"></path>
+            </g>
+            <line class="sprite-perch" x1="34" y1="329" x2="226" y2="329"></line>
+          </svg>
+        </button>
+        <div class="sprite-bubble" aria-live="polite">
+          <span class="sprite-name">MILELIK</span>
+          <p id="spriteSpeech">Local companion booting. SmolLM2 is bundled in models/.</p>
+        </div>
+      </section>
 
       <div class="status-card">
         <div class="status-line">
@@ -46,7 +92,7 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <p class="eyebrow">linux Mint · local model · workspace</p>
+          <p class="eyebrow">Local companion // linux Mint // bundled SmolLM2</p>
           <h2 id="pageTitle">Chat with Milelik</h2>
         </div>
         <div class="topbar-actions">
@@ -66,8 +112,8 @@
           <article class="card chat-card">
             <div class="card-heading">
               <div>
-                <h3>Ask Milelik to do something</h3>
-                <p>It can inspect this PC, use the network, open apps/VLC, and work with Git/GitHub.</p>
+                <h3>Talk to Milelik</h3>
+                <p>Your desktop companion can inspect this PC, use the network, open apps/VLC, and work with Git/GitHub.</p>
               </div>
               <button id="clearChatBtn" type="button" class="button ghost">Clear chat</button>
             </div>
