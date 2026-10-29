@@ -23,7 +23,6 @@ import http.server
 import importlib.util
 import json
 import os
-import re
 import secrets
 import shlex
 import shutil
@@ -41,11 +40,8 @@ INSTALLER_PATH = ROOT / "install.sh"
 MIN_PYTHON = (3, 10)
 LAUNCH_CHOICES = ("gui", "cli", "none")
 INSTALLER_CANCELLED = 10
-SETUP_FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<rect width="64" height="64" fill="#08090b"/>
-<path d="M10 50V14l14 18 8-12 8 12 14-18v36H43V31L32 45 21 31v19z" fill="#f7f7f2"/>
-</svg>
-"""
+COMPANION_SPRITE_FILENAME = "milelik-companion.svg"
+APP_ICON_FILENAME = "milelik-icon.svg"
 
 
 def expand_path(value) -> Path:
@@ -215,19 +211,29 @@ def display_available(environ=None) -> bool:
                 or sys.platform in ("darwin", "win32"))
 
 
-def load_sprite_svg(root: Path = ROOT) -> str:
-    """Reuse Milelik's inline SVG companion on the browser setup page."""
+def load_sprite_asset(filename: str, root: Path = ROOT) -> str:
+    """Load one canonical SVG from frontend/sprites/."""
+    asset_path = root / "frontend" / "sprites" / Path(filename).name
     try:
-        page = (root / "frontend" / "index.html").read_text(encoding="utf-8")
+        return asset_path.read_text(encoding="utf-8")
     except OSError:
-        page = ""
-    match = re.search(r'<svg class="milelik-sprite".*?</svg>', page, re.DOTALL)
-    if match:
-        return match.group(0)
-    return ('<svg class="milelik-sprite" viewBox="0 0 64 64" role="img" '
-            'aria-label="Milelik"><rect width="64" height="64" fill="#08090b"/>'
-            '<path d="M10 50V14l14 18 8-12 8 12 14-18v36H43V31L32 45 21 31v19z" '
-            'fill="#f7f7f2"/></svg>')
+        return ""
+
+
+def load_sprite_svg(root: Path = ROOT) -> str:
+    """Load Milelik's companion from the organized sprite folder."""
+    sprite_svg = load_sprite_asset(COMPANION_SPRITE_FILENAME, root)
+    if sprite_svg:
+        return sprite_svg
+    icon_svg = load_sprite_asset(APP_ICON_FILENAME, root)
+    if icon_svg and 'class="milelik-sprite"' not in icon_svg:
+        return icon_svg.replace("<svg", '<svg class="milelik-sprite"', 1)
+    return icon_svg
+
+
+def load_app_icon_svg(root: Path = ROOT) -> str:
+    """Load Milelik's browser icon from the organized sprite folder."""
+    return load_sprite_asset(APP_ICON_FILENAME, root)
 
 
 def _setup_pick(*values, default=""):
@@ -429,7 +435,7 @@ def render_browser_setup_page(token, defaults, records=None, selected=None,
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Set up Milelik</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/sprites/milelik-icon.svg">
 <link rel="stylesheet" href="/styles.css">
 <style>
 .setup-shell { width: min(1180px, calc(100vw - 28px)); margin: 0 auto; padding: 26px 0 44px; }
@@ -461,7 +467,7 @@ def render_browser_setup_page(token, defaults, records=None, selected=None,
         </div>
       </section>
       <p class="setup-note">This page is served only on this computer. Installation still uses Milelik's bundled installer; linux may ask for your password in the terminal that launched setup when system packages are installed.</p>
-      <p class="setup-note">No raster sprite images are used: Milelik's companion and icon on this page are SVG.</p>
+      <p class="setup-note">No raster sprite images are used: Milelik's companion and icon are SVG files from the organized frontend/sprites folder.</p>
     </aside>
     <form class="setup-form" method="post" action="/setup">
       <input type="hidden" name="token" value="__TOKEN__">
@@ -611,7 +617,7 @@ def render_browser_setup_progress(token, sprite_svg=""):
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Milelik setup</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/sprites/milelik-icon.svg">
 <link rel="stylesheet" href="/styles.css">
 <style>.setup-shell{width:min(720px,calc(100vw - 28px));margin:0 auto;padding:28px 0}.setup-card{border:1px solid var(--border);background:var(--panel);padding:20px;margin-top:16px}</style>
 </head><body><main class="setup-shell">
@@ -645,11 +651,12 @@ poll();
 class BrowserSetupSession:
     """Small local one-shot browser setup session."""
 
-    def __init__(self, args, token, page_html, progress_html):
+    def __init__(self, args, token, page_html, progress_html, icon_svg=""):
         self.args = args
         self.token = token
         self.page_html = page_html
         self.progress_html = progress_html
+        self.icon_svg = icon_svg
         self.server = None
         self.thread = None
         self.url = ""
@@ -699,11 +706,13 @@ def start_browser_setup(args, core=None, root: Path = ROOT, browser_open=None,
     defaults = browser_setup_defaults(args, cfg=cfg, selected=selected,
                                        root=root, core=core)
     sprite_svg = load_sprite_svg(root)
+    icon_svg = load_app_icon_svg(root)
     token = secrets.token_urlsafe(24)
     session = BrowserSetupSession(
         args, token,
         render_browser_setup_page(token, defaults, records, selected, sprite_svg),
         render_browser_setup_progress(token, sprite_svg),
+        icon_svg=icon_svg,
     )
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -738,8 +747,13 @@ def start_browser_setup(args, core=None, root: Path = ROOT, browser_open=None,
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
             query = urllib.parse.parse_qs(parsed.query)
-            if path == "/favicon.svg":
-                self._send(SETUP_FAVICON_SVG, "image/svg+xml; charset=utf-8")
+            if path in ("/sprites/milelik-icon.svg", "/favicon.svg",
+                        "/favicon.ico"):
+                if session.icon_svg:
+                    self._send(session.icon_svg,
+                               "image/svg+xml; charset=utf-8")
+                else:
+                    self._send("Not found.", "text/plain", 404)
                 return
             if not self._authorized(query):
                 self._send("Milelik setup token required.", "text/plain", 403)

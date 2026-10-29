@@ -190,6 +190,8 @@ class TestMilelikWebServer(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("Milelik — Local Companion Workspace", page)
         self.assertIn('id="spriteStage"', page)
+        self.assertIn('class="milelik-sprite"', page)
+        self.assertNotIn("MILELIK_COMPANION_SPRITE -->", page)
         self.assertIn('id="chatForm"', page)
         self.assertIn('id="codeEditor"', page)
         self.assertIn('id="endpointList"', page)
@@ -197,10 +199,19 @@ class TestMilelikWebServer(unittest.TestCase):
         status, _js, _headers = self.request("/app.js", token=None)
         self.assertEqual(status, 200)
         status, favicon, headers = self.request(
-            "/favicon.svg", token=None, raw=True)
+            "/sprites/milelik-icon.svg", token=None, raw=True)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get_content_type(), "image/svg+xml")
         self.assertTrue(favicon.lstrip().startswith(b"<svg"))
+        status, alias_icon, _headers = self.request(
+            "/favicon.svg", token=None, raw=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(alias_icon, favicon)
+        status, companion, headers = self.request(
+            "/sprites/milelik-companion.svg", token=None, raw=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get_content_type(), "image/svg+xml")
+        self.assertIn(b'class="milelik-sprite"', companion)
         status, error, _headers = self.request("/api/status", token=None)
         self.assertEqual(status, 401)
         self.assertIn("token", error["error"].lower())
@@ -448,14 +459,19 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
         html = (ROOT / "frontend" / "index.html").read_text()
         js = (ROOT / "frontend" / "app.js").read_text()
         css = (ROOT / "frontend" / "styles.css").read_text()
+        sprite = (ROOT / "frontend" / "sprites" / "milelik-companion.svg").read_text()
 
         for needle in (
-            'id="spriteStage"', 'class="milelik-sprite"',
+            'id="spriteStage"', "MILELIK_COMPANION_SPRITE",
             'id="spriteSpeech"', 'id="spriteStateLabel"',
-            "black-and-white angular glitch companion",
             "SmolLM2 is bundled in models/",
         ):
             self.assertIn(needle, html)
+        for needle in (
+            'class="milelik-sprite"', 'class="sprite-eye"',
+            'class="sprite-mouth"', "black-and-white angular glitch companion",
+        ):
+            self.assertIn(needle, sprite)
         self.assertIn("function setSpriteState", js)
         for state in ('"thinking"', '"talking"', '"glitch"', '"alert"', '"sleep"'):
             self.assertIn(state, js)
@@ -467,10 +483,16 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
         ):
             self.assertIn(needle, css)
 
-        favicon = (ROOT / "frontend" / "favicon.svg").read_text()
+        sprites_dir = ROOT / "frontend" / "sprites"
+        self.assertEqual(
+            {path.name for path in sprites_dir.glob("*.svg")},
+            {"milelik-companion.svg", "milelik-icon.svg"})
+        self.assertTrue((sprites_dir / "README.md").is_file())
+        self.assertFalse((ROOT / "frontend" / "favicon.svg").exists())
+        favicon = (sprites_dir / "milelik-icon.svg").read_text()
         self.assertTrue(favicon.lstrip().startswith("<svg"))
-        self.assertIn('type="image/svg+xml" href="/favicon.svg"', html)
-        combined = (html + js + css).lower()
+        self.assertIn('type="image/svg+xml" href="/sprites/milelik-icon.svg"', html)
+        combined = (html + sprite + favicon + js + css).lower()
         self.assertNotIn("<img", combined)
         for raster in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
                        "data:image/png", "data:image/jpeg", "data:image/gif"):
@@ -527,6 +549,8 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             self.assertTrue((home / ".local" / "share" / "milelik" / "models" / "README.md").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "models" / "LICENSE-SmolLM2-Apache-2.0.txt").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "app.js").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "sprites" / "milelik-companion.svg").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "sprites" / "milelik-icon.svg").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "setup_milelik.py").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-web").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-setup").is_file())

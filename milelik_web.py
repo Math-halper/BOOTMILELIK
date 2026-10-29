@@ -54,6 +54,9 @@ except Exception:  # pragma: no cover - run_server can be given a core module.
 
 APP_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = APP_DIR / "frontend"
+COMPANION_SPRITE_FILE = "sprites/milelik-companion.svg"
+APP_ICON_FILE = "sprites/milelik-icon.svg"
+COMPANION_SPRITE_PLACEHOLDER = "<!-- MILELIK_COMPANION_SPRITE -->"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_BODY_BYTES = 3_000_000
@@ -1564,6 +1567,25 @@ class MilelikHandler(BaseHTTPRequestHandler):
         self._send_bytes(path.read_bytes(), content_type,
                          extra_headers={"Cache-Control": "no-cache"})
 
+    def _serve_index(self):
+        """Serve the app with its companion sprite inlined from sprites/.
+
+        The canonical artwork stays in frontend/sprites/. Inlining the SVG
+        here preserves the CSS selectors that animate the sprite's eye,
+        mouth and glitch bars for each companion state.
+        """
+        index_path = self.state.frontend_dir / "index.html"
+        sprite_path = self.state.frontend_dir / COMPANION_SPRITE_FILE
+        if not index_path.is_file() or not sprite_path.is_file():
+            raise ApiError("Milelik's front-end files are missing. Re-run ./install.sh.", 500)
+        page = index_path.read_text(encoding="utf-8")
+        if COMPANION_SPRITE_PLACEHOLDER not in page:
+            raise ApiError("Milelik's companion sprite placeholder is missing.", 500)
+        sprite_svg = sprite_path.read_text(encoding="utf-8")
+        page = page.replace(COMPANION_SPRITE_PLACEHOLDER, sprite_svg, 1)
+        self._send_bytes(page.encode("utf-8"), "text/html; charset=utf-8",
+                         extra_headers={"Cache-Control": "no-cache"})
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
@@ -1582,15 +1604,23 @@ class MilelikHandler(BaseHTTPRequestHandler):
                     self._security_headers()
                     self.end_headers()
                     return
-                self._serve_static("index.html")
+                self._serve_index()
                 return
-            if path in ("/styles.css", "/app.js", "/favicon.svg"):
-                self._serve_static(path.lstrip("/"))
+            static_files = {
+                "/styles.css": "styles.css",
+                "/app.js": "app.js",
+                "/sprites/milelik-companion.svg": COMPANION_SPRITE_FILE,
+                "/sprites/milelik-icon.svg": APP_ICON_FILE,
+                # Compatibility alias for older bookmarks/cache entries.
+                "/favicon.svg": APP_ICON_FILE,
+            }
+            if path in static_files:
+                self._serve_static(static_files[path])
                 return
             if path == "/favicon.ico":
                 # Browsers may still ask for the legacy name; Milelik only
-                # ships SVG artwork, so return the SVG icon for that request.
-                self._serve_static("favicon.svg")
+                # ships SVG artwork, so return the organized SVG icon.
+                self._serve_static(APP_ICON_FILE)
                 return
             if path == "/api/health":
                 self._send_json({"ok": True, "service": "milelik",

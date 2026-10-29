@@ -96,10 +96,21 @@ class TestSetupMilelikScript(unittest.TestCase):
             with urllib.request.urlopen(session.url, timeout=10) as response:
                 page = response.read().decode()
                 cookie = response.headers.get("Set-Cookie", "").split(";")[0]
-            self.assertIn('<svg class="milelik-sprite"', page)
-            self.assertIn('type="image/svg+xml"', page)
+            self.assertIn('class="milelik-sprite"', page)
+            self.assertIn(
+                'type="image/svg+xml" href="/sprites/milelik-icon.svg"', page)
             self.assertNotIn("<img", page.lower())
             self.assertNotIn(".png", page.lower())
+            self.assertEqual(
+                setup.load_sprite_svg(ROOT),
+                (ROOT / "frontend" / "sprites" / "milelik-companion.svg").read_text())
+            with urllib.request.urlopen(
+                    session.url.split("?")[0].rstrip("/")
+                    + "/sprites/milelik-icon.svg", timeout=10) as response:
+                self.assertEqual(response.headers.get_content_type(),
+                                 "image/svg+xml")
+                self.assertEqual(
+                    response.read().decode(), setup.load_app_icon_svg(ROOT))
 
             form = {
                 "token": session.token, "action": "install",

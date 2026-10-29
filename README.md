@@ -285,10 +285,12 @@ The front end has four pages:
   button.
 
 The sidebar includes Milelik's original black-and-white angular glitch
-companion sprite and speech plate. The sprite and browser icon are **SVG
-only**—the front end and browser setup page do not use PNG/JPG/GIF/WebP sprite
-images. It idles, blinks, thinks, talks, glitches on errors, alerts during
-approval prompts, and sleeps when the model backend is unavailable.
+companion sprite and speech plate. All visual sprite artwork is organized as
+**SVG only** in [`frontend/sprites/`](frontend/sprites/): the companion and
+browser icon live there, and the front end/browser setup do not use
+PNG/JPG/GIF/WebP sprite images. It idles, blinks, thinks, talks, glitches on
+errors, alerts during approval prompts, and sleeps when the model backend is
+unavailable.
 Reduced-motion browser preferences disable its animation.
 
 The first launch creates `~/MilelikWorkspace` (or your chosen folder) with
