@@ -26,7 +26,7 @@ class TestSetupMilelikScript(unittest.TestCase):
             "--workspace", "/tmp/ws", "--web-port", "9876",
         ])
         command = setup.build_install_command(args, root=ROOT, interactive_terminal=False)
-        self.assertEqual(command[:2], ["bash", str(ROOT / "install.sh")])
+        self.assertEqual(command[:2], [sys.executable, str(ROOT / "install_milelik.py")])
         self.assertIn("--yes", command)
         launch_index = command.index("--launch")
         self.assertEqual(command[launch_index + 1], "none")
@@ -278,7 +278,7 @@ class TestSetupMilelikScript(unittest.TestCase):
             )
         text = output.getvalue()
         self.assertEqual(code, 0)
-        self.assertNotIn("install.sh", text)
+        self.assertNotIn("install_milelik.py", text)
         self.assertIn("milelik.py --gui", text)
 
     def test_installer_cancellation_prevents_launch(self):
@@ -301,7 +301,7 @@ class TestSetupMilelikScript(unittest.TestCase):
             )
         self.assertEqual(code, 0)
         self.assertEqual(len(calls), 1)
-        self.assertIn("install.sh", " ".join(calls[0][0]))
+        self.assertIn("install_milelik.py", " ".join(calls[0][0]))
         self.assertIn("Setup cancelled", output.getvalue())
 
     def test_root_is_rejected_with_python3_without_sudo_instructions(self):

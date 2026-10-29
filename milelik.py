@@ -15,9 +15,9 @@ No cloud API, no API keys, no pip dependencies - Python 3.10+ standard
 library only, which is what linux Mint ships with.
 
 Quick start:
-    ./install.sh                 # installs dependencies + Ollama + model + `milelik`
+    python3 setup_milelik.py     # browser setup + Python installer + web app
+    milelik                      # open the Milelik web app
     milelik "find the 10 biggest folders in my home directory"
-    milelik --interactive
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ MAX_TOOL_OUTPUT = 8000          # chars of tool output fed back to the model
 MAX_DOWNLOAD_BYTES = 2_000_000  # cap web downloads at ~2 MB
 USER_AGENT = f"Milelik/{__version__} (+https://github.com/Math-halper/BOOTMILELIK)"
 _APP_DIR = Path(__file__).resolve().parent
-DEPENDENCY_INSTALLER = _APP_DIR / "dependencies" / "install-dependencies.sh"
+DEPENDENCY_INSTALLER = _APP_DIR / "dependencies" / "install_dependencies.py"
 
 
 def dependency_install_command() -> str:
@@ -101,12 +101,12 @@ def dependency_install_command() -> str:
     the user an ad-hoc list of apt packages.
     """
     if not DEPENDENCY_INSTALLER.exists():
-        return "./install.sh"
+        return "python3 setup_milelik.py"
     try:
         command = "./" + str(DEPENDENCY_INSTALLER.relative_to(Path.cwd().resolve()))
     except ValueError:
         command = str(DEPENDENCY_INSTALLER)
-    return shlex.quote(command)
+    return "python3 " + shlex.quote(command)
 
 # ---------------------------------------------------------------------------
 # Terminal colours (disabled automatically when output is not a TTY)
@@ -900,7 +900,7 @@ def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODE
         err(f"Invalid Ollama model name: {ollama_name!r}")
         return False
     if not shutil.which("ollama"):
-        err("`ollama` command not found. Run ./install.sh first.")
+        err("`ollama` command not found. Run python3 setup_milelik.py first.")
         return False
 
     shards = _gguf_shards(path)
@@ -4011,7 +4011,7 @@ class OllamaClient:
         except urllib.error.URLError as e:
             raise OllamaError(
                 f"Cannot reach Ollama at {self.host} ({getattr(e, 'reason', e)}).\n"
-                f"Is it running? Try:  ollama serve    (or ./install.sh)")
+                f"Is it running? Try:  ollama serve    (or python3 setup_milelik.py)")
 
     def tags(self, timeout: int = 10):
         data = self._request("/api/tags", timeout=timeout)
@@ -4080,7 +4080,7 @@ class OllamaClient:
     def pull(self, model: str | None = None) -> bool:
         model = resolve_ollama_model_name(model or self.model)
         if not shutil.which("ollama"):
-            err("`ollama` command not found. Run ./install.sh first.")
+            err("`ollama` command not found. Run python3 setup_milelik.py first.")
             return False
         info(f"Downloading model {c_bold(model)} (this can take a few minutes)…")
         try:
@@ -4814,7 +4814,7 @@ def run_check(client, requested_model: str = "", local_models=None,
         ok = False
         print(c_red("  No local model server is reachable"))
         print("    Fix (pick one):")
-        print("      bash setup-model.sh   # imports the bundled SmolLM2 GGUF")
+        print("      python3 setup_model.py   # imports the bundled SmolLM2 GGUF")
         print("      ollama serve          # if Ollama is installed but stopped")
         print(f"      …or load {BUNDLED_MODEL_FILENAME} in LM Studio and start its server (port 1234)")
     elif client.model_available():
@@ -4825,10 +4825,10 @@ def run_check(client, requested_model: str = "", local_models=None,
                        "on the selected backend"))
         if getattr(client, "backend", "") == "ollama":
             if is_bundled_default_model(client.model):
-                print("    Fix:  bash setup-model.sh   # imports the bundled GGUF")
+                print("    Fix:  python3 setup_model.py   # imports the bundled GGUF")
             else:
                 print(f"    Fix:  ollama pull {client.model}")
-                print("          …or import a GGUF:  bash setup-model.sh /path/to/model.gguf")
+                print("          …or import a GGUF:  python3 setup_model.py /path/to/model.gguf")
         else:
             print(f"    Fix: load {BUNDLED_MODEL_FILENAME} in LM Studio / "
                   "llama-server, then re-run.")
@@ -4874,7 +4874,7 @@ def run_check(client, requested_model: str = "", local_models=None,
         f"ready — run `milelik --gui` (http://{web_cfg.get('web_host')}:"
         f"{web_cfg.get('web_port')}, workspace {web_cfg.get('workspace')})"
         if web_ready else
-        "not installed — re-run ./install.sh and enable the front end"))
+        "not installed — re-run python3 setup_milelik.py"))
 
     print(c_green("\nAll good - try:  milelik \"what is my local IP and public IP?\"")
           if ok else c_yellow("\nSomething above needs fixing before Milelik can work."))
@@ -4891,6 +4891,7 @@ def parse_args(argv=None):
         description="Fast local AI assistant for linux Mint (local model + shell, web, apps/VLC and Git/GitHub tools).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""examples:
+  milelik                        # open the Milelik web app
   milelik "find the 10 biggest folders in my home directory"
   milelik "what is my public IP, and is port 22 open on 192.168.1.1?"
   milelik "search the web for how to enable SSH on linux Mint and summarise it"
@@ -4906,7 +4907,7 @@ def parse_args(argv=None):
   milelik --model {TARGET_MODEL_LABEL} "write and test code"     # optional Qwen upgrade
   milelik --backend openai --host http://127.0.0.1:1234 "check my disk"   # LM Studio
   milelik --import-gguf models/{BUNDLED_MODEL_FILENAME}""")
-    p.add_argument("task", nargs="*", help="Task to perform (omit for interactive mode)")
+    p.add_argument("task", nargs="*", help="Task to perform (omit with no other arguments to open the web app)")
     p.add_argument("-i", "--interactive", action="store_true", help="Start the interactive chat")
     p.add_argument("--model", default=os.environ.get("MILELIK_MODEL", cfg.get("model", DEFAULT_MODEL)),
                    help=f"Model to use (default: {DEFAULT_MODEL}, Milelik's bundled "
@@ -4989,6 +4990,7 @@ def parse_args(argv=None):
     p.add_argument("--version", action="version", version=f"milelik {__version__}")
     parsed = p.parse_args(argv)
     raw_argv = list(sys.argv[1:] if argv is None else argv)
+    parsed.raw_argv = tuple(raw_argv)
     parsed.explicit_model = any(
         arg == "--model" or arg.startswith("--model=") for arg in raw_argv)
     parsed.explicit_model_file = any(
@@ -4998,6 +5000,18 @@ def parse_args(argv=None):
         arg == "--models-dir" or arg.startswith("--models-dir=")
         for arg in raw_argv)
     return parsed
+
+def should_open_web_app_by_default(raw_argv, stdin_isatty: bool,
+                                   stdout_isatty: bool, cfg: dict | None = None) -> bool:
+    """A bare interactive ``milelik`` invocation opens the web app.
+
+    Piping a task on stdin still works for scripts, and an explicitly
+    disabled front end leaves terminal chat as the fallback.
+    """
+    cfg = cfg or {}
+    return (not tuple(raw_argv or ()) and bool(stdin_isatty)
+            and bool(stdout_isatty) and cfg.get("frontend_enabled", True) is not False)
+
 
 def launch_frontend(args) -> int:
     """Load the sibling web module and run the local front end.
@@ -5009,7 +5023,7 @@ def launch_frontend(args) -> int:
     web_path = Path(__file__).resolve().parent / "milelik_web.py"
     if not web_path.is_file():
         err(f"Milelik's front end is missing: {web_path}")
-        print("Re-run ./install.sh from the Milelik repository.")
+        print("Re-run python3 setup_milelik.py from the Milelik repository.")
         return 1
     import importlib.util
     spec = importlib.util.spec_from_file_location("milelik_web", web_path)
@@ -5047,6 +5061,11 @@ def main(argv=None) -> int:
     if args.init_config:
         print(f"Wrote {write_default_config()}")
         return 0
+
+    if should_open_web_app_by_default(
+            getattr(args, "raw_argv", ()), sys.stdin.isatty(),
+            sys.stdout.isatty(), load_config()):
+        args.gui = True
 
     # Startup model-file discovery: read Milelik's models/ folders and pick
     # the file the user/config asks for (otherwise the bundled SmolLM2 GGUF,
@@ -5200,7 +5219,7 @@ def main(argv=None) -> int:
         if client.backend == "ollama":
             err(f"Ollama isn't running at {client.host}.")
             print("Start it with:  ollama serve\n"
-                  "Or install everything with:  ./install.sh")
+                  "Or install everything with:  python3 setup_milelik.py")
         else:
             err(f"No local model server is running at {client.host}.")
             print("Pick one:\n"
@@ -5208,7 +5227,7 @@ def main(argv=None) -> int:
                   "local server (Developer tab, port 1234)\n"
                   f"  • llama.cpp: llama-server -m models/{BUNDLED_MODEL_FILENAME} "
                   "--host 127.0.0.1 --port 8080 -c 8192 --jinja\n"
-                  "  • Ollama instead: bash setup-model.sh")
+                  "  • Ollama instead: python3 setup_model.py")
         return 1
 
     model_ready = client.model_available()
@@ -5231,10 +5250,10 @@ def main(argv=None) -> int:
         if client.backend == "ollama":
             warn(f"Model '{client.model}' is not installed in Ollama yet.")
             if is_bundled_default_model(client.model):
-                print("Run:  bash setup-model.sh   # imports Milelik's bundled GGUF")
+                print("Run:  python3 setup_model.py   # imports Milelik's bundled GGUF")
                 return 1
             print("Already have the GGUF file? Press n, then run:  "
-                  "bash setup-model.sh /path/to/model.gguf")
+                  "python3 setup_model.py /path/to/model.gguf")
             if sys.stdin.isatty():
                 try:
                     ans = input(f"Download it now with `ollama pull {client.model}`? "

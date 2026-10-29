@@ -1227,7 +1227,7 @@ class WebState:
                 raise ApiError(
                     f"Model {cfg.get('model')!r} is not available at "
                     f"{getattr(client, 'host', '')}.{detail} "
-                    "Run ./setup-model.sh or choose another model in Settings.", 503)
+                    "Run python3 setup_model.py or choose another model in Settings.", 503)
             toolbox = self.core.Toolbox(
                 auto=bool(cfg.get("auto", False)), cwd=str(self.workspace.root),
                 cmd_timeout=int(cfg.get("cmd_timeout") or 60),
@@ -1560,7 +1560,7 @@ class MilelikHandler(BaseHTTPRequestHandler):
     def _serve_static(self, filename: str):
         path = self.state.frontend_dir / filename
         if not path.is_file():
-            raise ApiError("Milelik's front-end files are missing. Re-run ./install.sh.", 500)
+            raise ApiError("Milelik's front-end files are missing. Re-run python3 setup_milelik.py.", 500)
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in ("application/javascript", "text/javascript"):
             content_type += "; charset=utf-8"
@@ -1577,7 +1577,7 @@ class MilelikHandler(BaseHTTPRequestHandler):
         index_path = self.state.frontend_dir / "index.html"
         sprite_path = self.state.frontend_dir / COMPANION_SPRITE_FILE
         if not index_path.is_file() or not sprite_path.is_file():
-            raise ApiError("Milelik's front-end files are missing. Re-run ./install.sh.", 500)
+            raise ApiError("Milelik's front-end files are missing. Re-run python3 setup_milelik.py.", 500)
         page = index_path.read_text(encoding="utf-8")
         if COMPANION_SPRITE_PLACEHOLDER not in page:
             raise ApiError("Milelik's companion sprite placeholder is missing.", 500)
@@ -1601,6 +1601,7 @@ class MilelikHandler(BaseHTTPRequestHandler):
                     self.send_response(HTTPStatus.FOUND)
                     self.send_header("Location", "/")
                     self.send_header("Set-Cookie", cookie)
+                    self.send_header("Content-Length", "0")
                     self._security_headers()
                     self.end_headers()
                     return

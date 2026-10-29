@@ -1,4 +1,4 @@
 # Milelik has no third-party Python dependencies.
 # It requires Python 3.10+ and uses only the Python standard library.
 # System packages are declared in dependencies/apt-*.txt and installed by
-# dependencies/install-dependencies.sh (also invoked by ./install.sh).
+# dependencies/install_dependencies.py (also invoked by install_milelik.py).

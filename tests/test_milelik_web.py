@@ -1,4 +1,5 @@
 """Tests for Milelik's browser front end, workspace and local APIs."""
+import http.client
 import importlib.util
 import json
 import os
@@ -195,6 +196,16 @@ class TestMilelikWebServer(unittest.TestCase):
         self.assertIn('id="chatForm"', page)
         self.assertIn('id="codeEditor"', page)
         self.assertIn('id="endpointList"', page)
+
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            connection.request("GET", "/?token=test-token")
+            redirect = connection.getresponse()
+            self.assertEqual(redirect.status, 302)
+            self.assertEqual(redirect.getheader("Content-Length"), "0")
+            self.assertEqual(redirect.read(), b"")
+        finally:
+            connection.close()
 
         status, _js, _headers = self.request("/app.js", token=None)
         self.assertEqual(status, 200)
@@ -511,6 +522,12 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             (bindir / "sudo").write_text("#!/usr/bin/env bash\nexec \"$@\"\n")
             (bindir / "dpkg-query").write_text(
                 "#!/usr/bin/env bash\necho 'install ok installed'\n")
+            for command in (
+                    "curl", "file", "find", "ip", "ss", "pgrep", "pkill",
+                    "free", "df", "lscpu", "zstd", "vlc", "playerctl",
+                    "gh", "git", "ffprobe", "mediainfo", "libreoffice",
+                    "node", "npm", "pip3"):
+                (bindir / command).write_text("#!/bin/sh\nexit 0\n")
             for path in bindir.iterdir():
                 path.chmod(0o755)
 
@@ -529,7 +546,7 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
                 "FAKE_APT_LOG": str(apt_log),
             })
             result = subprocess.run(
-                [str(ROOT / "install.sh"), "--wizard", "--skip-check"],
+                [sys.executable, str(ROOT / "install_milelik.py"), "--wizard", "--skip-check"],
                 cwd=ROOT, env=env, input=answers, text=True,
                 capture_output=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -552,8 +569,16 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "sprites" / "milelik-companion.svg").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "frontend" / "sprites" / "milelik-icon.svg").is_file())
             self.assertTrue((home / ".local" / "share" / "milelik" / "setup_milelik.py").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "app.py").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "setup_model.py").is_file())
+            self.assertTrue((home / ".local" / "share" / "milelik" / "install_milelik.py").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-web").is_file())
+            self.assertTrue((home / ".local" / "bin" / "milelik-app").is_file())
             self.assertTrue((home / ".local" / "bin" / "milelik-setup").is_file())
+            self.assertTrue((home / ".local" / "bin" / "milelik-model-setup").is_file())
+            launcher = (home / ".local" / "bin" / "milelik").read_text()
+            self.assertTrue(launcher.startswith("#!/usr/bin/env python3"))
+            self.assertFalse(list(home.rglob("*.sh")))
             self.assertTrue((home / ".local" / "share" / "applications" / "milelik-workspace.desktop").is_file())
             self.assertIn(" nodejs ", " " + apt_log.read_text() + " ")
 

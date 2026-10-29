@@ -1132,23 +1132,23 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn("dependencies = []", pyproject)
 
     def test_dependency_installer_list_is_complete_and_deduplicated(self):
-        script = ROOT / "dependencies" / "install-dependencies.sh"
+        script = ROOT / "dependencies" / "install_dependencies.py"
         self.assertTrue(os.access(script, os.X_OK))
         result = subprocess.run(
-            [str(script), "--full", "--list"], cwd=ROOT,
+            [sys.executable, str(script), "--full", "--list"], cwd=ROOT,
             text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         packages = result.stdout.splitlines()
         self.assertEqual(len(packages), len(set(packages)))
-        for package in ("python3", "vlc", "playerctl", "gh", "git", "ffmpeg"):
+        for package in ("python3", "vlc", "playerctl", "gh", "git", "ffmpeg", "zstd"):
             self.assertIn(package, packages)
         self.assertTrue(milelik.DEPENDENCY_INSTALLER.exists())
-        self.assertIn("install-dependencies.sh", milelik.dependency_install_command())
+        self.assertIn("install_dependencies.py", milelik.dependency_install_command())
 
     def test_dependency_installer_with_fake_apt_and_check_mode(self):
-        script = ROOT / "dependencies" / "install-dependencies.sh"
+        script = ROOT / "dependencies" / "install_dependencies.py"
         commands = [
-            "python3", "curl", "file", "find", "ip", "ss", "xdg-open",
+            "python3", "curl", "file", "find", "ip", "ss", "zstd", "xdg-open",
             "pgrep", "pkill", "free", "df", "lscpu", "vlc", "playerctl",
             "gh", "git", "ffprobe", "mediainfo", "libreoffice", "notify-send",
             "xclip", "xsel", "wl-copy", "wl-paste", "brightnessctl", "pactl",
@@ -1175,7 +1175,7 @@ class TestBundledDependencies(unittest.TestCase):
             })
 
             install = subprocess.run(
-                [str(script), "--full", "--no-update"], cwd=ROOT, env=env,
+                [sys.executable, str(script), "--full", "--no-update"], cwd=ROOT, env=env,
                 text=True, capture_output=True, timeout=20)
             self.assertEqual(install.returncode, 0, install.stderr)
             self.assertIn("dependencies are ready", install.stdout)
@@ -1186,38 +1186,48 @@ class TestBundledDependencies(unittest.TestCase):
             self.assertIn(" libreoffice ", " " + calls + " ")
 
             check = subprocess.run(
-                [str(script), "--full", "--check"], cwd=ROOT, env=env,
+                [sys.executable, str(script), "--full", "--check"], cwd=ROOT, env=env,
                 text=True, capture_output=True, timeout=20)
             self.assertEqual(check.returncode, 0, check.stderr)
             self.assertIn("All expected dependency commands", check.stdout)
 
     def test_main_installer_uses_and_copies_bundled_dependencies(self):
-        installer = (ROOT / "install.sh").read_text()
-        self.assertIn("dependencies/install-dependencies.sh\" --full", installer)
-        self.assertIn("DEPENDENCY_MODE", installer)
-        self.assertIn('cp -a "$SCRIPT_DIR/dependencies" "$APP_DIR/dependencies"', installer)
-        self.assertIn('requirements.txt pyproject.toml', installer)
-        self.assertIn('run_setup_wizard', installer)
-        self.assertIn('Step 5 of 7 — browser front end and workspace', installer)
-        self.assertIn('cp -a "$SCRIPT_DIR/frontend" "$APP_DIR/frontend"', installer)
-        self.assertIn('milelik_web.py', installer)
-        self.assertIn('milelik-web', installer)
-        self.assertIn('setup_milelik.py', installer)
-        self.assertIn('milelik-setup', installer)
-        self.assertIn('LAUNCH_WAS_SET', installer)
-        self.assertIn('bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full', installer)
-        self.assertIn('bash "$SCRIPT_DIR/setup-model.sh"', installer)
-        self.assertIn('python3 "$APP_DIR/milelik.py" --check', installer)
-        self.assertIn('MILELIK_ALLOW_ROOT', installer)
-        self.assertIn('BUNDLED_MODEL_FILE="smollm2-135m-instruct-q4_1.gguf"', installer)
-        self.assertIn('BUNDLED_OLLAMA_MODEL="milelik-smollm2:135m"', installer)
-        self.assertIn('LICENSE-SmolLM2-Apache-2.0.txt', installer)
-        self.assertIn('--browser-setup', installer)
-        self.assertIn('OPEN_BROWSER_SETUP', installer)
-        self.assertIn('MILELIK_BROWSER_SETUP_ACTIVE=1', installer)
-        model_setup = (ROOT / "setup-model.sh").read_text()
-        self.assertIn('TARGET_FILE="smollm2-135m-instruct-q4_1.gguf"', model_setup)
-        self.assertIn('OLLAMA_LIBRARY_MODEL="smollm2:135m"', model_setup)
+        installer = (ROOT / "install_milelik.py").read_text()
+        self.assertIn("install_dependencies.py", installer)
+        self.assertIn("dependency_mode", installer)
+        self.assertIn('_replace_tree(root / "dependencies"', installer)
+        self.assertIn('"requirements.txt"', installer)
+        self.assertIn('"pyproject.toml"', installer)
+        self.assertIn("run_setup_wizard", installer)
+        self.assertIn("Step 5 of 7 — browser front end and workspace", installer)
+        self.assertIn('shutil.copytree(root / "frontend"', installer)
+        self.assertIn('"app.py"', installer)
+        self.assertIn('"milelik_web.py"', installer)
+        self.assertIn("milelik-web", installer)
+        self.assertIn('"setup_milelik.py"', installer)
+        self.assertIn("milelik-setup", installer)
+        self.assertIn('"setup_model.py"', installer)
+        self.assertIn("milelik-model-setup", installer)
+        self.assertIn('"install_milelik.py"', installer)
+        self.assertIn('"--check"', installer)
+        self.assertIn("MILELIK_ALLOW_ROOT", installer)
+        self.assertIn('BUNDLED_MODEL_FILE = "smollm2-135m-instruct-q4_1.gguf"', installer)
+        self.assertIn('BUNDLED_OLLAMA_MODEL = "milelik-smollm2:135m"', installer)
+        self.assertIn("LICENSE-SmolLM2-Apache-2.0.txt", installer)
+        self.assertIn("--browser-setup", installer)
+        self.assertIn("MILELIK_BROWSER_SETUP_ACTIVE", installer)
+        self.assertFalse(list(ROOT.rglob("*.sh")))
+        model_setup = (ROOT / "setup_model.py").read_text()
+        self.assertIn('TARGET_FILE = "smollm2-135m-instruct-q4_1.gguf"', model_setup)
+        self.assertIn('OLLAMA_LIBRARY_MODEL = "smollm2:135m"', model_setup)
+
+    def test_bare_interactive_invocation_opens_web_app(self):
+        self.assertEqual(milelik.parse_args([]).raw_argv, ())
+        self.assertTrue(milelik.should_open_web_app_by_default((), True, True, {}))
+        self.assertFalse(milelik.should_open_web_app_by_default((), False, True, {}))
+        self.assertFalse(milelik.should_open_web_app_by_default(("task",), True, True, {}))
+        self.assertFalse(milelik.should_open_web_app_by_default(
+            (), True, True, {"frontend_enabled": False}))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@
 # stops). This is the official Qwen2.5-Coder ChatML template with tool
 # support, plus stop tokens and sampling settings suited to tool use.
 #
-# Easiest:  ./setup-model.sh /path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
+# Easiest:  python3 setup_model.py /path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
 # Manual:   put this file next to the .gguf, then
 #           ollama create milelik-coder:7b -f Modelfile.qwen2.5-coder-abliterated
 #

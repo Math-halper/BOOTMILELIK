@@ -2,7 +2,7 @@ graft frontend
 graft dependencies
 graft docs
 include models/README.md models/.gitkeep models/LICENSE-SmolLM2-Apache-2.0.txt
-include install.sh setup-model.sh setup_milelik.py uninstall.sh
+include app.py install_milelik.py setup_model.py setup_milelik.py uninstall_milelik.py
 include milelik.desktop milelik-workspace.desktop
 include Modelfile.qwen2.5-coder-abliterated requirements.txt README.md LICENSE
 global-exclude *.pyc

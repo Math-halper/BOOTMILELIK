@@ -1,6 +1,6 @@
 # Milelik — BOOTMILELIK
 
-A **fast, local AI desktop companion for linux Mint**. It now ships with
+A **fast, local AI web app for linux Mint**. It now ships with
 **SmolLM2-135M-Instruct-Q4_1** in `models/` as its small default brain, while
 larger local GGUFs such as Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M remain
 supported upgrades. The AI model runs 100% on your own computer — via
@@ -18,8 +18,8 @@ your permission before running commands or making changes — see
 [Safety](#-safety) below.
 
 ```
-Browser ──► Milelik front end/workspace/APIs ──► milelik agent ──► local model
-Terminal ─────────────────────────────────────►    │        (Ollama / LM Studio / llama.cpp)
+Browser ──► Milelik web app/workspace/APIs ──► milelik agent ──► local model
+Optional terminal/API clients ────────────────►    │        (Ollama / LM Studio / llama.cpp)
                                                    ├──► bash commands + files (with your OK)
                                                    ├──► workspace editor + Python/Bash/JS runner
                                                    ├──► local coding / maths / utility APIs
@@ -28,7 +28,9 @@ Terminal ───────────────────────�
                                                    └──► git_repo / github_* ──► GitHub
 ```
 
-Pure Python standard library, **zero pip dependencies**. At startup Milelik
+Pure Python standard library, **zero pip dependencies**, and no Milelik
+shell scripts: setup, installation, model setup, dependency installation and
+uninstallation are all Python programs. At startup Milelik
 reads every AI model file in its `models/` folder and chooses a runnable GGUF
 from what it finds; the bundled SmolLM2 file is preferred on a fresh setup.
 The browser setup page asks for your model, safety, workspace and front-end
@@ -71,7 +73,7 @@ coding and multi-step tool work. Milelik recognises all of its names:
 | Ollama library | `huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M` (note: "abliterate") |
 | LM Studio | `qwen2.5-coder-7b-instruct-abliterated-q4_k_m` |
 | Hugging Face | `bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF:Q4_K_M` |
-| After `./setup-model.sh` | `milelik-coder:7b` (your GGUF imported into Ollama) |
+| After `python3 setup_model.py` | `milelik-coder:7b` (your GGUF imported into Ollama) |
 
 ### Put model files in `models/`
 
@@ -102,10 +104,10 @@ Git; the bundled SmolLM2 GGUF is the one intentional tracked exception — see
 
 Three ways to run it — use whichever matches what you already have:
 
-**1. Ollama (default)** — `./install.sh` imports the bundled GGUF for you, or
-manually:
+**1. Ollama (default)** — the Python installer imports the bundled GGUF for
+you, or manually:
 ```bash
-bash setup-model.sh
+python3 setup_model.py
 milelik "check my disk space, memory, and local IP"
 ```
 You can also pass the bundled model by any of its names — it is translated:
@@ -117,12 +119,12 @@ milelik --model-file smollm2-135m-instruct-q4_1.gguf "check my disk"
 **2. You already have another GGUF file** — import it instead of downloading
 weights again:
 ```bash
-bash setup-model.sh ~/Downloads/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
+python3 setup_model.py ~/Downloads/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
 # or, equivalently:
 milelik --import-gguf ~/Downloads/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
 milelik "check my disk"   # now uses that import (milelik-coder:7b for Qwen)
 ```
-`bash setup-model.sh` with no arguments searches Milelik's `models/` folders
+`python3 setup_model.py` with no arguments searches Milelik's `models/` folders
 for the bundled SmolLM2 file. Qwen2.5-Coder imports use
 [`Modelfile.qwen2.5-coder-abliterated`](Modelfile.qwen2.5-coder-abliterated) —
 importing that raw GGUF *without* its template is the usual reason Qwen tool
@@ -189,8 +191,9 @@ python3 setup_milelik.py --check
 python3 setup_milelik.py --dry-run       # show the commands without running them
 ```
 
-You can also run `bash install.sh` directly. With no options on a desktop it
-delegates to the same **browser setup page**. In the browser you can choose:
+You can also run `python3 install_milelik.py` directly. With no options on a
+desktop it delegates to the same **browser setup page**. In the browser you
+can choose:
 
 1. Dependency set (full/core/optional/none)
 2. Where the model comes from: the bundled SmolLM2 GGUF, your existing GGUF,
@@ -210,11 +213,11 @@ model/server, and adds both **Milelik** and **Milelik Workspace** to
 your app menu.
 
 ```bash
-bash install.sh              # open browser setup on a desktop
-bash install.sh --browser-setup # force browser setup
-bash install.sh --wizard     # force the old terminal questions
-bash install.sh --yes        # no questions; sensible defaults
-bash install.sh --help       # every installer option
+python3 install_milelik.py              # open browser setup on a desktop
+python3 install_milelik.py --browser-setup # force browser setup
+python3 install_milelik.py --wizard     # force the old terminal questions
+python3 install_milelik.py --yes        # no questions; sensible defaults
+python3 install_milelik.py --help       # every installer option
 ```
 
 The system packages live in this repository in
@@ -222,17 +225,18 @@ The system packages live in this repository in
 [`dependencies/apt-tools.txt`](dependencies/apt-tools.txt) (VLC/media,
 desktop, LibreOffice, Git/GitHub, Node/npm and Python project tools) and
 [`dependencies/apt-optional.txt`](dependencies/apt-optional.txt) (fallbacks).
-`./install.sh` runs
-[`dependencies/install-dependencies.sh`](dependencies/install-dependencies.sh)
+`install_milelik.py` runs
+[`dependencies/install_dependencies.py`](dependencies/install_dependencies.py)
 for you. See [`dependencies/README.md`](dependencies/README.md) for the map.
 
 If you installed without launching Milelik, open a **new terminal** and try
 the front end or CLI:
 
 ```bash
-milelik --gui          # browser chat + workspace/code runner + local APIs
+milelik                # open the web app
+milelik --gui          # same web app, explicitly
 milelik "what is my local IP, public IP, and how much disk space is free?"
-milelik --interactive
+milelik --interactive  # optional terminal chat
 ```
 
 **Already have the GGUF somewhere else?** Point the installer at it — no
@@ -241,23 +245,25 @@ download, and no second copy of the weights outside Ollama's store:
 ```bash
 python3 setup_milelik.py --gguf /path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf
 # or:
-GGUF=/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf ./install.sh
+GGUF=/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf python3 install_milelik.py
 ```
 
 **Want a different model anyway?** Any Ollama model works:
 
 ```bash
-MODEL=qwen3:4b ./install.sh    # smaller/faster, weaker at multi-step tasks
-MODEL=qwen3:14b ./install.sh   # smarter, slower, needs more RAM/VRAM
+MODEL=qwen3:4b python3 install_milelik.py    # smaller/faster, weaker at multi-step tasks
+MODEL=qwen3:14b python3 install_milelik.py   # smarter, slower, needs more RAM/VRAM
 ```
 
-## Front end, workspace and local APIs
+## Web app, workspace and local APIs
 
-Start Milelik's browser app with:
+Start Milelik's web app with:
 
 ```bash
-milelik --gui
+milelik
 # equivalent commands:
+python3 app.py
+milelik --gui
 milelik-web
 milelik --gui --web-port 8766 --workspace-dir ~/Projects
 ```
@@ -350,7 +356,7 @@ milelik "notify me when you're done, copy the result to my clipboard"
 milelik "turn the brightness down 20% and check my battery"
 ```
 Playback controls use `playerctl`, and both it and VLC are in the bundled
-full dependency set installed by `./install.sh`. App launches, screenshots,
+full dependency set installed by the Python installer. App launches, screenshots,
 clipboard access, screen-lock and wallpaper changes ask for confirmation
 first (unless `--yolo`).
 
@@ -519,15 +525,15 @@ entries (argument lists, never a shell), media tools use MPRIS via
 
 Python dependencies are deliberately empty (`requirements.txt` and
 `pyproject.toml` declare none). System dependencies are version-controlled
-as apt manifests in `dependencies/`; `install-dependencies.sh` installs or
-checks them, and `install.sh` copies the manifests, dependency installer,
-`milelik_web.py`, `frontend/` and a preserved `models/` folder beside the
-installed `milelik.py`. Repository model files are hard-linked/symlinked into
+as apt manifests in `dependencies/`; `install_dependencies.py` installs or
+checks them, and `install_milelik.py` copies the manifests, dependency
+installer, `app.py`, `milelik_web.py`, `frontend/` and a preserved `models/`
+folder beside the installed `milelik.py`. Repository model files are hard-linked/symlinked into
 the installed `models/` folder when needed instead of being copied again. Apt
 supplies the signed distribution binaries and transitive libraries for the
 user's Mint release, while the browser setup front end lives in
-`setup_milelik.py` and the installer/model bootstrap logic remains in
-`install.sh` and `setup-model.sh`. The maths evaluator parses
+`setup_milelik.py` and the installer/model bootstrap logic lives in
+`install_milelik.py` and `setup_model.py`. The maths evaluator parses
 a restricted Python AST rather than calling `eval`, and workspace subprocesses
 run without GitHub/model API tokens in their environment.
 
@@ -537,32 +543,33 @@ run without GitHub/model API tokens in their environment.
 |---|---|
 | `Permission denied` when starting setup, including with `sudo` | Do not run the whole setup as root. From the repository folder run `python3 setup_milelik.py` (not `./setup_milelik.py` and not `sudo`). The `python3` form does not need the script's executable bit. If it still fails, run `findmnt -T . -o TARGET,OPTIONS`; if the options contain `noexec`, move/clone Milelik into your home folder (for example `~/BOOTMILELIK`) and run it there. `chmod +x setup_milelik.py` only fixes a missing executable bit; it cannot override `noexec`. |
 | "No local model server is reachable" | `milelik --check` probes Ollama (11434), LM Studio (1234) and llama.cpp (8080) and shows which is up and where the model was found. Start one: `ollama serve`, LM Studio's server, or `llama-server …`. |
-| Model not found in Ollama | Run `bash setup-model.sh` to import `models/smollm2-135m-instruct-q4_1.gguf`, or `ollama pull smollm2:135m`. Passing `--model SmolLM2-135M-Instruct-Q4_1` is fine — the name is translated to `milelik-smollm2:135m`. |
+| Model not found in Ollama | Run `python3 setup_model.py` to import `models/smollm2-135m-instruct-q4_1.gguf`, or `ollama pull smollm2:135m`. Passing `--model SmolLM2-135M-Instruct-Q4_1` is fine — the name is translated to `milelik-smollm2:135m`. |
 | Model not found in LM Studio | Actually load the GGUF in LM Studio (not just download it) and start the server, then `milelik --check`. Or pass the exact id LM Studio shows via `--model`. |
 | My model file is not listed | Run `milelik --list-models` and check the folders it prints. Put the file in the repository `models/`, the installed `~/.local/share/milelik/models/`, `./models/` where you launch Milelik, or pass `--models-dir /path/to/models`. Incomplete downloads ending `.part` are ignored. |
 | A file in `models/` says “unsupported” | Milelik's Ollama/LM Studio/llama.cpp path runs GGUF files. Convert SafeTensors/PyTorch weights to GGUF first, and keep all shards of a split GGUF together. |
-| It imported my GGUF but talks nonsense / never uses tools | First check whether you are using the tiny 135M model; short, single-step prompts work much better. If it is Qwen2.5-Coder, a bare `ollama create` may have omitted its template. Re-import with `bash setup-model.sh /path/to/model.gguf` — Qwen imports apply [`Modelfile.qwen2.5-coder-abliterated`](Modelfile.qwen2.5-coder-abliterated). |
+| It imported my GGUF but talks nonsense / never uses tools | First check whether you are using the tiny 135M model; short, single-step prompts work much better. If it is Qwen2.5-Coder, a bare `ollama create` may have omitted its template. Re-import with `python3 setup_model.py /path/to/model.gguf` — Qwen imports apply [`Modelfile.qwen2.5-coder-abliterated`](Modelfile.qwen2.5-coder-abliterated). |
 | Model describes commands instead of running them | Usually a template problem (above), or the server rejected native tools. Milelik already falls back to text `<tool_call>` calls; with llama.cpp make sure you started `llama-server` with `--jinja`. |
 | Very slow answers | Smaller context (`--ctx 4096`) or close other heavy apps. The bundled 135M model should be quick; a selected 7B model will be slower and its first reply after idle includes load time. |
 | `milelik: command not found` after install | Open a new terminal (Mint adds `~/.local/bin` to PATH at login), or `export PATH="$HOME/.local/bin:$PATH"`. |
 | Web search returns nothing | DuckDuckGo sometimes rate-limits; wait a bit, or ask it to `fetch_url` a specific site. |
-| VLC opens but pause/volume/now-playing don't work | Playback control needs MPRIS via `playerctl`, which is in the bundled full set. Run `./dependencies/install-dependencies.sh --check` (or rerun `./install.sh`) and `milelik --check`. Also make sure the same desktop session is running Milelik and VLC (don't run one over plain SSH without a D-Bus session). |
+| VLC opens but pause/volume/now-playing don't work | Playback control needs MPRIS via `playerctl`, which is in the bundled full set. Run `python3 dependencies/install_dependencies.py --check` (or rerun `python3 setup_milelik.py`) and `milelik --check`. Also make sure the same desktop session is running Milelik and VLC (don't run one over plain SSH without a D-Bus session). |
 | "Application not found" | Ask it to `list_apps` first to get exact names/ids, or install the app. Flatpak/Snap apps appear once their `.desktop` files are in the standard application dirs. |
 | GitHub says 401/403 / "needs authentication" | Read-only public lookups need no login; writes do. Run `gh auth login`, or set `GITHUB_TOKEN` in your shell profile. 403 can also be rate limiting — being logged in raises the limit a lot. Check with "who am I on GitHub?" / `github_account auth_status`. |
 | GitHub tool says "no repository given" | Run Milelik inside the cloned repo (it reads the `origin` remote), or name it: "…in owner/repo". |
 | Front end says “Connection token needed” | Open it using the complete URL printed by `milelik --gui` (it contains `?token=…` and sets a cookie), or paste the printed token into Preferences → Connection. For scripts, send `X-Milelik-Token`. |
 | Front-end port is already in use | Another Milelik/server is probably already running. Use the existing browser tab, stop the old process with Ctrl+C, or start `milelik --gui --web-port 8766`. |
 | Front end loads but the model does not | The workspace/APIs work without a model. For Chat, run `ollama serve` or load the GGUF in LM Studio/llama.cpp, then check model/backend/host in Preferences and run `milelik --check`. |
-| JavaScript code will not run in Workspace | Install/check the full bundled dependencies (`./dependencies/install-dependencies.sh --check`) — it includes Node.js and npm. Python and Bash snippets do not need Node. |
+| JavaScript code will not run in Workspace | Install/check the full bundled dependencies (`python3 dependencies/install_dependencies.py --check`) — it includes Node.js and npm. Python and Bash snippets do not need Node. |
 | PR merge bounces at the prompt | By design: merging needs you to type `YES` (capitalised) in the terminal or browser approval dialog — it can't happen from `--yolo` or piped input. |
 
 ## Tests
 
-87 tests, no running model or internet required (fake Ollama, fake LM Studio/
+93 tests, no running model or internet required (fake Ollama, fake LM Studio/
 OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
 LibreOffice binaries, the real front-end and browser-setup HTTP servers on
-ephemeral ports, a scripted terminal-wizard fallback run, and a real
-temporary Git repo are used):
+ephemeral ports, the Python installer's scripted terminal-wizard fallback,
+the Python model-setup/uninstall replacements, and a real temporary Git repo
+are used):
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -571,7 +578,7 @@ python3 -m unittest discover -s tests -v
 ## Uninstall
 
 ```bash
-./uninstall.sh   # removes Milelik only; Ollama/models are left alone
+python3 uninstall_milelik.py   # removes Milelik only; Ollama/models are left alone
 ```
 
 ## License

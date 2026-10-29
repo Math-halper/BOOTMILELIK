@@ -10,7 +10,7 @@ local browser setup page instead of asking setup questions in the terminal.
 It checks the local models/ folder, runs Milelik's bundled installer (unless
 asked not to), and then starts the browser front end, terminal chat, one
 task, --check, or the model list. The heavy system-package and model
-provisioning work stays in install.sh, which is the installer already shipped
+provisioning work stays in install_milelik.py, the Python installer shipped
 in this repository. Use --terminal-setup if you prefer the old terminal
 questions, or --yes for unattended defaults.
 """
@@ -36,7 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 CORE_PATH = ROOT / "milelik.py"
-INSTALLER_PATH = ROOT / "install.sh"
+INSTALLER_PATH = ROOT / "install_milelik.py"
 MIN_PYTHON = (3, 10)
 LAUNCH_CHOICES = ("gui", "cli", "none")
 INSTALLER_CANCELLED = 10
@@ -179,7 +179,7 @@ def run_command(command, *, dry_run=False, runner=subprocess.run, cwd=None,
         print(f"Error: could not run {command[0]}: {error}", file=sys.stderr)
         print("Permission denied here usually means a missing executable bit "
               "or a filesystem mounted with noexec. sudo does not bypass "
-              "noexec; run scripts through python3/bash or move Milelik "
+              "noexec; run Milelik's Python files through python3 or move Milelik "
               "into your home folder.", file=sys.stderr)
         return 126
     except OSError as error:
@@ -837,7 +837,7 @@ def start_browser_setup(args, core=None, root: Path = ROOT, browser_open=None,
 
 def build_install_command(args, root: Path = ROOT, interactive_terminal=False):
     """Build the bundled installer command controlled by this script."""
-    command = ["bash", str(root / "install.sh")]
+    command = [sys.executable, str(root / "install_milelik.py")]
     if args.yes or getattr(args, "browser_setup", False) or not interactive_terminal:
         command.append("--yes")
     else:
@@ -1122,7 +1122,7 @@ def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
 
     auto_browser_setup = bool(
         should_install and not args.terminal_setup and not args.yes
-        and interactive_terminal and display_available(environ))
+        and display_available(environ))
     use_browser_setup = bool(
         should_install and not args.dry_run
         and (args.browser_setup or auto_browser_setup))
@@ -1179,7 +1179,7 @@ def main(argv=None, runner=subprocess.run, input_fn=input, stdin_isatty=None,
                 return 0
 
     if should_install:
-        installer = root / "install.sh"
+        installer = root / "install_milelik.py"
         if installer.is_file():
             if not interactive_terminal and not args.yes:
                 print("No interactive terminal detected; using installer defaults. Use --yes to make this explicit.")

@@ -71,7 +71,7 @@ milelik --list-models       # show every model file found
 milelik --choose-model      # force the startup chooser
 milelik --model-file models/smollm2-135m-instruct-q4_1.gguf
 milelik --no-model-scan     # ignore the models/ folders for this run
-bash setup-model.sh         # import the bundled default into Ollama
+python3 setup_model.py      # import the bundled default into Ollama
 ```
 
 ## Git note

@@ -1,7 +1,7 @@
 # Optional fallback programs. Milelik's default full dependency set
 # already provides a supported implementation for every feature; these
 # are extra alternatives that Milelik can also use when present.
-# Install them with: ./dependencies/install-dependencies.sh --with-optional
+# Install them with: python3 dependencies/install_dependencies.py --with-optional
 
 feh
 imagemagick
