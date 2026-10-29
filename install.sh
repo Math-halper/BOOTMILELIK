@@ -5,11 +5,19 @@
 #   GGUF=/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf ./install.sh
 #                                # import a GGUF you already have (no download)
 #   MODEL=qwen3:4b ./install.sh  # or pick any other Ollama model instead
+#
+# Every system dependency is declared in dependencies/apt-*.txt and is
+# installed automatically by dependencies/install-dependencies.sh:
+#   DEPENDENCY_MODE=full ./install.sh            # default: all tool helpers
+#   DEPENDENCY_MODE=with-optional ./install.sh   # also optional fallbacks
+#   DEPENDENCY_MODE=required ./install.sh        # core runtime packages only
+#   DEPENDENCY_MODE=none ./install.sh            # skip apt dependency install
 set -euo pipefail
 
 MODEL_WAS_SET=0
 [ -n "${MODEL:-}" ] && MODEL_WAS_SET=1
 MODEL="${MODEL:-huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M}"
+DEPENDENCY_MODE="${DEPENDENCY_MODE:-full}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$HOME/.local/share/milelik"
 BIN_DIR="$HOME/.local/bin"
@@ -18,13 +26,43 @@ DESKTOP_DIR="$HOME/.local/share/applications"
 echo "🤖 Installing Milelik (model: $MODEL)"
 echo
 
-# --- 1. Python 3.10+ (ships with linux Mint 21/22) ---------------------------
+# --- 1. System dependencies declared in this repository ----------------------
+# The manifests in dependencies/apt-*.txt are canonical: apt-required.txt is
+# the core runtime, apt-tools.txt adds VLC/media, desktop, LibreOffice, Git
+# and GitHub helpers, and apt-optional.txt holds extra fallback programs.
+case "$DEPENDENCY_MODE" in
+    full)
+        "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full
+        ;;
+    required|minimal)
+        "$SCRIPT_DIR/dependencies/install-dependencies.sh" --required
+        ;;
+    with-optional|optional)
+        "$SCRIPT_DIR/dependencies/install-dependencies.sh" --with-optional
+        ;;
+    none|skip)
+        echo "Skipping bundled dependency installation (DEPENDENCY_MODE=$DEPENDENCY_MODE)."
+        ;;
+    *)
+        echo "Invalid DEPENDENCY_MODE: $DEPENDENCY_MODE" >&2
+        echo "Use full, with-optional, required or none." >&2
+        exit 2
+        ;;
+esac
+
 if ! command -v python3 >/dev/null 2>&1 || \
    ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
-    echo "Installing Python 3…"
-    sudo apt-get update && sudo apt-get install -y python3 curl
+    echo "Milelik needs Python 3.10 or newer." >&2
+    echo "Install the repository's dependencies with:" >&2
+    echo "  $SCRIPT_DIR/dependencies/install-dependencies.sh --required" >&2
+    exit 1
 fi
-command -v curl >/dev/null 2>&1 || sudo apt-get install -y curl
+if ! command -v curl >/dev/null 2>&1; then
+    echo "Milelik's installer needs curl." >&2
+    echo "Install the repository's dependencies with:" >&2
+    echo "  $SCRIPT_DIR/dependencies/install-dependencies.sh --required" >&2
+    exit 1
+fi
 
 # --- 2. Ollama (local model runtime) ------------------------------------------
 if ! command -v ollama >/dev/null 2>&1; then
@@ -89,6 +127,16 @@ install -m 0755 "$SCRIPT_DIR/milelik.py" "$APP_DIR/milelik.py"
 for extra in setup-model.sh Modelfile.qwen2.5-coder-abliterated; do
     if [ -f "$SCRIPT_DIR/$extra" ]; then
         install -m 0755 "$SCRIPT_DIR/$extra" "$APP_DIR/$extra"
+    fi
+done
+# Keep the dependency manifests/installer with the installed app, so a
+# missing helper can be fixed without returning to the source checkout.
+rm -rf "$APP_DIR/dependencies"
+cp -a "$SCRIPT_DIR/dependencies" "$APP_DIR/dependencies"
+chmod +x "$APP_DIR/dependencies/install-dependencies.sh"
+for extra in requirements.txt pyproject.toml; do
+    if [ -f "$SCRIPT_DIR/$extra" ]; then
+        install -m 0644 "$SCRIPT_DIR/$extra" "$APP_DIR/$extra"
     fi
 done
 cat > "$BIN_DIR/milelik" <<EOF

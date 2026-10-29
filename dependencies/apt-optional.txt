@@ -1,0 +1,10 @@
+# Optional fallback programs. Milelik's default full dependency set
+# already provides a supported implementation for every feature; these
+# are extra alternatives that Milelik can also use when present.
+# Install them with: ./dependencies/install-dependencies.sh --with-optional
+
+feh
+imagemagick
+maim
+scrot
+xfce4-screenshooter

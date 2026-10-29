@@ -854,5 +854,111 @@ class TestGitHubTools(unittest.TestCase):
             self.assertIn("--title Via gh", recorded)
 
 
+class TestBundledDependencies(unittest.TestCase):
+    @staticmethod
+    def _packages(name):
+        packages = []
+        for raw in (ROOT / "dependencies" / name).read_text().splitlines():
+            package = raw.split("#", 1)[0].strip()
+            if package:
+                packages.append(package)
+        return packages
+
+    def test_dependency_manifests_cover_all_tool_helpers(self):
+        required = set(self._packages("apt-required.txt"))
+        tools = set(self._packages("apt-tools.txt"))
+        optional = set(self._packages("apt-optional.txt"))
+
+        self.assertTrue({
+            "bash", "ca-certificates", "curl", "file", "iproute2",
+            "procps", "python3", "util-linux", "xdg-utils",
+        }.issubset(required))
+        self.assertTrue({
+            "brightnessctl", "ffmpeg", "gh", "git", "gnome-screenshot",
+            "libglib2.0-bin", "libgtk-3-bin", "libnotify-bin",
+            "libreoffice", "mediainfo", "playerctl", "pulseaudio-utils",
+            "vlc", "wl-clipboard", "xclip", "xsel",
+        }.issubset(tools))
+        self.assertTrue({
+            "feh", "imagemagick", "maim", "scrot", "xfce4-screenshooter",
+        }.issubset(optional))
+
+    def test_python_dependency_manifests_declare_no_packages(self):
+        requirements = [
+            line.strip() for line in (ROOT / "requirements.txt").read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(requirements, [])
+        pyproject = (ROOT / "pyproject.toml").read_text()
+        self.assertIn('requires-python = ">=3.10"', pyproject)
+        self.assertIn("dependencies = []", pyproject)
+
+    def test_dependency_installer_list_is_complete_and_deduplicated(self):
+        script = ROOT / "dependencies" / "install-dependencies.sh"
+        self.assertTrue(os.access(script, os.X_OK))
+        result = subprocess.run(
+            [str(script), "--full", "--list"], cwd=ROOT,
+            text=True, capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packages = result.stdout.splitlines()
+        self.assertEqual(len(packages), len(set(packages)))
+        for package in ("python3", "vlc", "playerctl", "gh", "git", "ffmpeg"):
+            self.assertIn(package, packages)
+        self.assertTrue(milelik.DEPENDENCY_INSTALLER.exists())
+        self.assertIn("install-dependencies.sh", milelik.dependency_install_command())
+
+    def test_dependency_installer_with_fake_apt_and_check_mode(self):
+        script = ROOT / "dependencies" / "install-dependencies.sh"
+        commands = [
+            "python3", "curl", "file", "find", "ip", "ss", "xdg-open",
+            "pgrep", "pkill", "free", "df", "lscpu", "vlc", "playerctl",
+            "gh", "git", "ffprobe", "mediainfo", "libreoffice", "notify-send",
+            "xclip", "xsel", "wl-copy", "wl-paste", "brightnessctl", "pactl",
+            "gnome-screenshot", "gsettings", "gtk-launch",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            bindir = Path(tmp)
+            apt_log = bindir / "apt.log"
+            (bindir / "apt-get").write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$*\" >> \"$FAKE_APT_LOG\"\n")
+            (bindir / "sudo").write_text("#!/usr/bin/env bash\nexec \"$@\"\n")
+            (bindir / "dpkg-query").write_text(
+                "#!/usr/bin/env bash\necho 'install ok installed'\n")
+            for command in commands:
+                (bindir / command).write_text("#!/bin/sh\nexit 0\n")
+            for path in bindir.iterdir():
+                path.chmod(0o755)
+            env = dict(os.environ)
+            env.update({
+                "PATH": str(bindir) + ":" + env.get("PATH", ""),
+                "FAKE_APT_LOG": str(apt_log),
+            })
+
+            install = subprocess.run(
+                [str(script), "--full", "--no-update"], cwd=ROOT, env=env,
+                text=True, capture_output=True, timeout=20)
+            self.assertEqual(install.returncode, 0, install.stderr)
+            self.assertIn("dependencies are ready", install.stdout)
+            calls = apt_log.read_text()
+            self.assertIn("install -y", calls)
+            self.assertIn(" vlc ", " " + calls + " ")
+            self.assertIn(" gh ", " " + calls + " ")
+            self.assertIn(" libreoffice ", " " + calls + " ")
+
+            check = subprocess.run(
+                [str(script), "--full", "--check"], cwd=ROOT, env=env,
+                text=True, capture_output=True, timeout=20)
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertIn("All expected dependency commands", check.stdout)
+
+    def test_main_installer_uses_and_copies_bundled_dependencies(self):
+        installer = (ROOT / "install.sh").read_text()
+        self.assertIn("dependencies/install-dependencies.sh\" --full", installer)
+        self.assertIn("DEPENDENCY_MODE", installer)
+        self.assertIn('cp -a "$SCRIPT_DIR/dependencies" "$APP_DIR/dependencies"', installer)
+        self.assertIn('requirements.txt pyproject.toml', installer)
+
+
 if __name__ == "__main__":
     unittest.main()

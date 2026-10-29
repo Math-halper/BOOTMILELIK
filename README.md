@@ -23,8 +23,10 @@ You ──► milelik (agent) ──► local model (Ollama / LM Studio / llama.
               └──► git_repo / github_* ─────► GitHub (repos, issues, PRs, CI)
 ```
 
-Single Python file, **zero pip dependencies** (standard library only), so it
-installs in seconds and can't break from dependency updates.
+Single Python file, **zero pip dependencies** (standard library only). Every
+system dependency is declared in this repository under
+[`dependencies/`](dependencies/) and installed automatically by
+`./install.sh`, so there are no extra dependency commands to run by hand.
 
 ## 🎯 The model: Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M
 
@@ -94,16 +96,28 @@ cd BOOTMILELIK
 ./install.sh
 ```
 
-That installs Ollama (if needed), sets up
+That one command installs **all of Milelik's declared dependencies**, then
+Ollama (if needed), sets up
 **Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M** (~4.7 GB — imported from a
 GGUF it finds in the usual places, or downloaded), installs the `milelik`
 command, and adds a Milelik entry to your app menu.
 
-For the app/GitHub tools, also install the small helpers they use (several
-are already in Mint; `milelik --check` reports which are present):
+The system packages are not an undocumented side list: they live in this
+repository in [`dependencies/apt-required.txt`](dependencies/apt-required.txt)
+(core runtime), [`dependencies/apt-tools.txt`](dependencies/apt-tools.txt)
+(VLC/media, desktop, LibreOffice, Git and GitHub helpers) and
+[`dependencies/apt-optional.txt`](dependencies/apt-optional.txt) (extra
+fallback programs). `./install.sh` runs
+[`dependencies/install-dependencies.sh`](dependencies/install-dependencies.sh)
+for you. See [`dependencies/README.md`](dependencies/README.md) for the full
+dependency map. Useful variants:
 
 ```bash
-sudo apt install vlc playerctl gh git ffmpeg xclip brightnessctl libnotify-bin
+./install.sh                                      # full dependency set (default)
+DEPENDENCY_MODE=with-optional ./install.sh        # full + optional fallbacks
+DEPENDENCY_MODE=required ./install.sh             # core packages only
+DEPENDENCY_MODE=none ./install.sh                 # skip apt; manage packages yourself
+./dependencies/install-dependencies.sh --check    # verify the declared packages later
 gh auth login   # once, for GitHub write actions (issues, PRs, merging…)
 ```
 
@@ -173,9 +187,10 @@ milelik "how long is ~/Videos/holiday.mp4 and what resolution is it?"
 milelik "notify me when you're done, copy the result to my clipboard"
 milelik "turn the brightness down 20% and check my battery"
 ```
-Playback controls need `playerctl`; VLC itself just needs to be installed.
-App launches, screenshots, clipboard access, screen-lock and wallpaper
-changes ask for confirmation first (unless `--yolo`).
+Playback controls use `playerctl`, and both it and VLC are in the bundled
+full dependency set installed by `./install.sh`. App launches, screenshots,
+clipboard access, screen-lock and wallpaper changes ask for confirmation
+first (unless `--yolo`).
 
 ### 🐙 Git & GitHub tools
 
@@ -321,6 +336,15 @@ entries (argument lists, never a shell), media tools use MPRIS via
 `playerctl`, and GitHub reads use the REST API while writes go through the
 `gh` CLI when available.
 
+Python dependencies are deliberately empty (`requirements.txt` and
+`pyproject.toml` declare none). System dependencies are version-controlled
+as apt manifests in `dependencies/`; `install-dependencies.sh` installs or
+checks them, and `install.sh` copies that directory beside the installed
+`milelik.py` so runtime error messages can point to the exact bundled
+installer. Apt supplies the signed distribution binaries and their
+transitive libraries for the user's Mint release, while the Ollama/model
+bootstrap logic remains in `install.sh` and `setup-model.sh`.
+
 ## 🔧 Troubleshooting
 
 | Problem | Fix |
@@ -333,7 +357,7 @@ entries (argument lists, never a shell), media tools use MPRIS via
 | Very slow answers | Smaller context (`--ctx 4096`), close other heavy apps, or use a smaller model (`ollama pull qwen3:4b`). First reply after idle includes model load time. |
 | `milelik: command not found` after install | Open a new terminal (Mint adds `~/.local/bin` to PATH at login), or `export PATH="$HOME/.local/bin:$PATH"`. |
 | Web search returns nothing | DuckDuckGo sometimes rate-limits; wait a bit, or ask it to `fetch_url` a specific site. |
-| VLC opens but pause/volume/now-playing don't work | Playback control needs MPRIS via `playerctl`: `sudo apt install playerctl`. `milelik --check` lists which helpers are present. Also make sure the same desktop session is running Milelik and VLC (don't run one over plain SSH without a D-Bus session). |
+| VLC opens but pause/volume/now-playing don't work | Playback control needs MPRIS via `playerctl`, which is in the bundled full set. Run `./dependencies/install-dependencies.sh --check` (or rerun `./install.sh`) and `milelik --check`. Also make sure the same desktop session is running Milelik and VLC (don't run one over plain SSH without a D-Bus session). |
 | "Application not found" | Ask it to `list_apps` first to get exact names/ids, or install the app. Flatpak/Snap apps appear once their `.desktop` files are in the standard application dirs. |
 | GitHub says 401/403 / "needs authentication" | Read-only public lookups need no login; writes do. Run `gh auth login`, or set `GITHUB_TOKEN` in your shell profile. 403 can also be rate limiting — being logged in raises the limit a lot. Check with "who am I on GitHub?" / `github_account auth_status`. |
 | GitHub tool says "no repository given" | Run Milelik inside the cloned repo (it reads the `origin` remote), or name it: "…in owner/repo". |
@@ -341,8 +365,8 @@ entries (argument lists, never a shell), media tools use MPRIS via
 
 ## 🧪 Tests
 
-45 tests, no model or internet required (fake Ollama, fake LM Studio/
-OpenAI-compatible and fake GitHub API servers, fake `gh`/`playerctl`/VLC/
+50 tests, no model or internet required (fake Ollama, fake LM Studio/
+OpenAI-compatible and fake GitHub API servers, fake apt/`gh`/`playerctl`/VLC/
 LibreOffice binaries, and a real temporary Git repo are used):
 
 ```bash

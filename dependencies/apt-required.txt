@@ -1,0 +1,17 @@
+# Milelik's core runtime packages for linux Mint / Ubuntu / Debian.
+# One apt package per line. Blank lines and comments are ignored by
+# dependencies/install-dependencies.sh.
+
+bash
+ca-certificates
+coreutils
+curl
+file
+findutils
+grep
+iproute2
+procps
+python3
+sed
+util-linux
+xdg-utils

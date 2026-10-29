@@ -1,0 +1,20 @@
+# Packages used by Milelik's app, VLC/media, desktop, LibreOffice,
+# local Git and GitHub tools. These are installed by default together
+# with apt-required.txt ("full" mode).
+
+brightnessctl
+ffmpeg
+gh
+git
+gnome-screenshot
+libglib2.0-bin
+libgtk-3-bin
+libnotify-bin
+libreoffice
+mediainfo
+playerctl
+pulseaudio-utils
+vlc
+wl-clipboard
+xclip
+xsel

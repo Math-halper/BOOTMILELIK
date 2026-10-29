@@ -15,7 +15,7 @@ No cloud API, no API keys, no pip dependencies - Python 3.10+ standard
 library only, which is what linux Mint ships with.
 
 Quick start:
-    ./install.sh                 # installs Ollama + a model + `milelik`
+    ./install.sh                 # installs dependencies + Ollama + model + `milelik`
     milelik "find the 10 biggest folders in my home directory"
     milelik --interactive
 """
@@ -44,7 +44,7 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # The model Milelik is tuned for out of the box. Note the Ollama library
 # spells the repo "abliterate", while the Hugging Face GGUF file uses
@@ -63,6 +63,26 @@ DEFAULT_CMD_TIMEOUT = 60
 MAX_TOOL_OUTPUT = 8000          # chars of tool output fed back to the model
 MAX_DOWNLOAD_BYTES = 2_000_000  # cap web downloads at ~2 MB
 USER_AGENT = f"Milelik/{__version__} (+https://github.com/Math-halper/BOOTMILELIK)"
+_APP_DIR = Path(__file__).resolve().parent
+DEPENDENCY_INSTALLER = _APP_DIR / "dependencies" / "install-dependencies.sh"
+
+
+def dependency_install_command() -> str:
+    """Return the bundled dependency installer command for user hints.
+
+    The dependency manifests and installer live beside this file both in a
+    source checkout and in the installed copy under ~/.local/share/milelik.
+    Keeping the hint generated from __file__ means a missing helper can be
+    installed from Milelik's own repository payload, rather than by telling
+    the user an ad-hoc list of apt packages.
+    """
+    if not DEPENDENCY_INSTALLER.exists():
+        return "./install.sh"
+    try:
+        command = "./" + str(DEPENDENCY_INSTALLER.relative_to(Path.cwd().resolve()))
+    except ValueError:
+        command = str(DEPENDENCY_INSTALLER)
+    return shlex.quote(command)
 
 # ---------------------------------------------------------------------------
 # Terminal colours (disabled automatically when output is not a TTY)
@@ -1091,7 +1111,8 @@ class Toolbox:
         probe = self._playerctl(["status"], player)
         if probe is None:
             return ("playerctl is not installed, so playback can't be inspected/"
-                    "controlled. Install it with: sudo apt install playerctl")
+                    "controlled. Install Milelik's bundled dependencies with: "
+                    + dependency_install_command())
         code, status, error = probe
         if code != 0:
             return ("No media player is running"
@@ -1248,7 +1269,8 @@ class Toolbox:
             _c, out, _e = self._exec([file_cmd, "-b", str(p)])
             if out.strip():
                 lines.append("Type: " + out.strip())
-        lines.append("(Install ffmpeg for full media details: sudo apt install ffmpeg)")
+        lines.append("(Install ffmpeg for full media details with Milelik's "
+                     f"bundled dependency installer: {dependency_install_command()})")
         return "\n".join(lines)
 
     def vlc(self, action: str = "", source: str = "", value: str = "",
@@ -1268,8 +1290,9 @@ class Toolbox:
                          "start-paused options only apply to the vlc binary.)"
                          if self._as_bool(fullscreen) or self._as_bool(start_paused)
                          else "")
-                return ("Error: VLC is not installed. Install it with: "
-                        "sudo apt install vlc")
+                return ("Error: VLC is not installed. Install Milelik's "
+                        "bundled dependencies with: "
+                        + dependency_install_command())
             if not source:
                 args = [binary]
                 return self._launch_detached(args, "open VLC", "VLC")
@@ -1353,8 +1376,9 @@ class Toolbox:
     def _brightness(self, act: str, value: str = "") -> str:
         bctl = shutil.which("brightnessctl")
         if not bctl:
-            return ("brightnessctl is not installed. Install it with: "
-                    "sudo apt install brightnessctl")
+            return ("brightnessctl is not installed. Install Milelik's "
+                    "bundled dependencies with: "
+                    + dependency_install_command())
         if act == "brightness_get":
             _c, cur, _e = self._exec([bctl, "get"])
             _c, mx, _e = self._exec([bctl, "max"])
@@ -1447,8 +1471,8 @@ class Toolbox:
                     if code == 0 and target.exists():
                         return f"Screenshot saved to {target}."
                     return truncate(f"{binary} failed:\n{err.strip()}")
-            return ("No screenshot tool found. Install one with: "
-                    "sudo apt install gnome-screenshot")
+            return ("No screenshot tool found. Install Milelik's bundled "
+                    "dependencies with: " + dependency_install_command())
         if act in ("clipboard_get", "clipboard_set"):
             if not self.confirm("read the clipboard" if act.endswith("get")
                                 else "replace the clipboard contents",
@@ -1466,8 +1490,9 @@ class Toolbox:
                 elif wlpaste:
                     cmd = [wlpaste]
                 else:
-                    return ("No clipboard tool found. Install one with: "
-                            "sudo apt install xclip")
+                    return ("No clipboard tool found. Install Milelik's "
+                            "bundled dependencies with: "
+                            + dependency_install_command())
                 code, out, err = self._exec(cmd, timeout=10)
                 return truncate(out) if code == 0 else \
                     f"Could not read the clipboard: {err.strip()}"
@@ -1480,8 +1505,9 @@ class Toolbox:
             elif wlcopy:
                 cmd = [wlcopy]
             else:
-                return ("No clipboard tool found. Install one with: "
-                        "sudo apt install xclip")
+                return ("No clipboard tool found. Install Milelik's "
+                        "bundled dependencies with: "
+                        + dependency_install_command())
             code, _o, err = self._exec(cmd, timeout=10, input_text=str(value or ""))
             return "Clipboard updated." if code == 0 else \
                 f"Could not set the clipboard: {err.strip()}"
@@ -1541,8 +1567,9 @@ class Toolbox:
         if not act:
             act = "convert" if format else "open"
         if not binary:
-            return ("Error: LibreOffice is not installed. Install it with: "
-                    "sudo apt install libreoffice")
+            return ("Error: LibreOffice is not installed. Install Milelik's "
+                    "bundled dependencies with: "
+                    + dependency_install_command())
         if act == "open":
             flags = {"writer": "--writer", "calc": "--calc",
                      "impress": "--impress", "draw": "--draw", "base": "--base"}
@@ -1608,7 +1635,9 @@ class Toolbox:
     def _git(self, args, path: str = ".", timeout: int = 120):
         binary = shutil.which("git")
         if not binary:
-            return 127, "", "git: command not found (sudo apt install git)"
+            return (127, "", "git: command not found (install Milelik's "
+                    "bundled dependencies with: "
+                    + dependency_install_command() + ")")
         directory = self._repo_directory(path)
         return self._exec([binary, "-C", str(directory)] + [str(a) for a in args],
                           timeout=timeout, cwd=str(directory))
@@ -1911,7 +1940,8 @@ class Toolbox:
                     lines.append(truncate(combined, 1200))
                 lines.append("gh auth: " + ("logged in" if code == 0 else "not logged in"))
             else:
-                lines.append("gh CLI: not installed (sudo apt install gh)")
+                lines.append("gh CLI: not installed (run "
+                             f"{dependency_install_command()})")
             lines.append("GITHUB_TOKEN/GH_TOKEN env var: "
                          + ("set (value hidden)" if self._github_token() else "not set"))
             data, error = self._github_get_auth("/user", what="whoami")
@@ -2459,8 +2489,9 @@ class Toolbox:
                     ["run", "view", run_id, "--repo", slug, "--log"], timeout=180)
                 if result is None:
                     return ("Run logs need the gh CLI (the API returns them as "
-                            "a zip). Install/login with: sudo apt install gh "
-                            "&& gh auth login")
+                            "a zip). Install it with "
+                            f"{dependency_install_command()}, then run "
+                            "`gh auth login`.")
                 return self._format_proc(*result)
             if not self.confirm(f"{act} GitHub Actions run",
                                  f"{slug} run {run_id}"):
@@ -2589,8 +2620,9 @@ class Toolbox:
                 ["release", "upload", str(tag).strip(), str(asset),
                  "--repo", slug], timeout=900)
             if gh_result is None:
-                return ("Uploading release assets needs the gh CLI "
-                        "(`sudo apt install gh` + `gh auth login`).")
+                return ("Uploading release assets needs the gh CLI (run "
+                        f"{dependency_install_command()}, then "
+                        "`gh auth login`).")
             return self._github_write_result(
                 gh_result, success_hint=f"Uploaded {asset.name} to release {tag}.")
         return ("Error: github_releases action must be list, latest, view, "
@@ -4180,8 +4212,7 @@ def run_check(client, requested_model: str = "") -> int:
           + (", ".join(found) if found else "(none)"))
     if missing:
         print(c_dim("           optional, missing: " + ", ".join(missing)
-                    + "  (sudo apt install vlc playerctl gh git ffmpeg xclip "
-                      "brightnessctl libnotify-bin)"))
+                    + f"  (install with: {dependency_install_command()})"))
     print("  GitHub : " + (
         "GITHUB_TOKEN/GH_TOKEN is set" if Toolbox._github_token() else
         "`gh auth login` recommended for GitHub write actions"
