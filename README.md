@@ -272,6 +272,23 @@ MODEL=qwen3:4b python3 install_milelik.py    # smaller/faster, weaker at multi-s
 MODEL=qwen3:14b python3 install_milelik.py   # smarter, slower, needs more RAM/VRAM
 ```
 
+### Fully offline (no internet after install)
+
+Everything Milelik needs is in this repository except the model weights, which
+you supply once. Python is standard-library-only, the front end loads nothing
+from any CDN, and the 14 MB `engine/llama-server` runtime is packaged in
+`engine/`, so after setup nothing phones home:
+
+```bash
+DEPENDENCY_MODE=none python3 install_milelik.py --offline --yes   # install, zero downloads
+python3 engine/serve.py --model /path/to/your.gguf                # local model server, no Ollama needed
+milelik "your task"                                               # talks to the engine on 127.0.0.1:11434
+```
+
+`--offline` / `MILELIK_OFFLINE=1` forbids every download: a missing Ollama
+runtime or model fails with a message instead of fetching. Only the opt-in web
+tools (`fetch_url`, GitHub tools) ever use the network, and only when asked.
+
 ## Web app, workspace and local APIs
 
 Start Milelik's web app with:

@@ -135,9 +135,14 @@ class TestOllamaCompatTranslations(unittest.TestCase):
 
 class TestServeHelpers(unittest.TestCase):
     def test_find_model_defaults_to_bundled_gguf(self):
-        found = serve.find_model("")
-        self.assertEqual(found.name, "smollm2-135m-instruct-q4_1.gguf")
-        self.assertTrue(found.is_file())
+        bundled = ROOT / "models" / "smollm2-135m-instruct-q4_1.gguf"
+        if bundled.is_file():
+            found = serve.find_model("")
+            self.assertEqual(found.name, "smollm2-135m-instruct-q4_1.gguf")
+            self.assertTrue(found.is_file())
+        else:
+            with self.assertRaises(serve.EngineError):
+                serve.find_model("")
         with self.assertRaises(serve.EngineError):
             serve.find_model("/nonexistent/model.gguf")
 

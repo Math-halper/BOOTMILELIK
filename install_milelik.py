@@ -896,7 +896,8 @@ def ensure_model(options: InstallerOptions, *, root: Path = ROOT,
             print("Offline mode: Ollama was not found in PATH, "
                   "~/.local/bin, ~/bin, /usr/local/bin, /usr/bin, "
                   "/opt/ollama/bin or /snap/bin, so nothing was downloaded.")
-            print("Install Ollama or re-run without --offline.")
+            print("Install Ollama, re-run without --offline, or serve a local GGUF")
+            print("with the packaged engine:  python3 engine/serve.py --model /path/to/model.gguf")
             return 1
         print("Installing Ollama…")
         installer = ollama_installer or install_ollama_user_local
