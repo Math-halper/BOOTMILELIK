@@ -450,5 +450,36 @@ class TestInstallerOffline(unittest.TestCase):
         self.assertEqual([cmd for cmd in pulls if "pull" in cmd], [])
 
 
+class TestSetupModelValidate(unittest.TestCase):
+    def _header(self, items=0):
+        return (b"GGUF" + (3).to_bytes(4, "little")
+                + (0).to_bytes(8, "little") + items.to_bytes(8, "little"))
+
+    def test_validate_flag_accepts_good_file(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            gguf = Path(tmp) / "good.gguf"
+            gguf.write_bytes(self._header())
+            code = setup_model.main(
+                ["--validate", str(gguf)], root=ROOT, cwd=Path(tmp),
+                runner=lambda *args, **kwargs: calls.append(args),
+                which=lambda _name: calls.append("which"))
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [])
+
+    def test_validate_flag_rejects_corrupt_file(self):
+        calls = []
+        payload = self._header(items=1) + (2 ** 60).to_bytes(8, "little")
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad.gguf"
+            bad.write_bytes(payload)
+            code = setup_model.main(
+                ["--validate", str(bad)], root=ROOT, cwd=Path(tmp),
+                runner=lambda *args, **kwargs: calls.append(args),
+                which=lambda _name: calls.append("which"))
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
