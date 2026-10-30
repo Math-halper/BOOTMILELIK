@@ -379,5 +379,76 @@ class TestOllamaRuntime(unittest.TestCase):
         self.assertTrue(options.vendor_dir.endswith("vendor"))
 
 
+class TestInstallerOffline(unittest.TestCase):
+    def test_find_ollama_checks_home_bin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            candidate = home / "bin" / "ollama"
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("#!/bin/sh\n")
+            candidate.chmod(0o755)
+            self.assertEqual(
+                installer.find_ollama(which=lambda _name: None, home=home),
+                str(candidate))
+
+    def test_find_ollama_empty_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                installer.find_ollama(which=lambda _name: None, home=Path(tmp)),
+                "")
+
+    def test_parse_args_offline_flag_and_env(self):
+        options = installer.parse_args(["--offline"], environ={}, home=Path("/tmp"))
+        self.assertTrue(options.offline)
+        options = installer.parse_args(
+            [], environ={"MILELIK_OFFLINE": "1"}, home=Path("/tmp"))
+        self.assertTrue(options.offline)
+        options = installer.parse_args([], environ={}, home=Path("/tmp"))
+        self.assertFalse(options.offline)
+
+    def test_ensure_model_offline_refuses_runtime_download(self):
+        calls = []
+        pulls = []
+
+        def fake_installer(*, home, environ):
+            calls.append((home, environ))
+            return home / ".local" / "bin" / "ollama"
+
+        def fake_runner(command, **_kwargs):
+            pulls.append(list(command))
+            return SimpleNamespace(returncode=0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            options = installer.InstallerOptions(
+                model="tiny:test", offline=True, model_was_set=True)
+            code = installer.ensure_model(
+                options, root=Path(tmp), home=Path(tmp),
+                runner=fake_runner, which=lambda _name: None, env={},
+                ready=lambda: True, ollama_installer=fake_installer)
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [])
+        self.assertEqual([cmd for cmd in pulls if "pull" in cmd], [])
+
+    def test_ensure_model_offline_refuses_model_pull(self):
+        pulls = []
+
+        def fake_runner(command, **_kwargs):
+            pulls.append(list(command))
+            return SimpleNamespace(returncode=0)
+
+        def fake_which(name):
+            return "/fake/ollama" if name == "ollama" else None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            options = installer.InstallerOptions(
+                model="tiny:test", offline=True, model_was_set=True)
+            code = installer.ensure_model(
+                options, root=Path(tmp), home=Path(tmp),
+                runner=fake_runner, which=fake_which, env={},
+                ready=lambda: True)
+        self.assertEqual(code, 1)
+        self.assertEqual([cmd for cmd in pulls if "pull" in cmd], [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5052,6 +5052,13 @@ def launch_frontend(args) -> int:
         print("\nMilelik front end stopped.")
         return 130
 
+def offline_mode(env=None) -> bool:
+    """True when Milelik must not download anything (MILELIK_OFFLINE=1)."""
+    source = os.environ if env is None else env
+    return str(source.get("MILELIK_OFFLINE", "")).strip().lower() in (
+        "1", "true", "yes", "y", "on")
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
 
@@ -5254,6 +5261,10 @@ def main(argv=None) -> int:
                 return 1
             print("Already have the GGUF file? Press n, then run:  "
                   "python3 setup_model.py /path/to/model.gguf")
+            if offline_mode():
+                print("Offline mode (MILELIK_OFFLINE=1): not downloading "
+                      f"'{client.model}'.")
+                return 1
             if sys.stdin.isatty():
                 try:
                     ans = input(f"Download it now with `ollama pull {client.model}`? "

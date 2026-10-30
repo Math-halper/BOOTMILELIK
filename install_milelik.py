@@ -75,6 +75,7 @@ class InstallerOptions:
     force_wizard: bool = False
     browser_setup: bool = False
     skip_check: bool = False
+    offline: bool = False
     model_was_set: bool = False
     ctx_was_set: bool = False
     max_steps_was_set: bool = False
@@ -165,6 +166,9 @@ def parse_args(argv=None, environ=None, home: Path | None = None) -> InstallerOp
     parser.add_argument("--skip-check", action="store_true",
                         default=bool_value(env.get("SKIP_CHECK", "0")),
                         help="do not run milelik --check at the end")
+    parser.add_argument("--offline", action="store_true",
+                        default=bool_value(env.get("MILELIK_OFFLINE", "0")),
+                        help="never download Ollama or models; fail clearly instead")
     parser.add_argument("--model", default=env.get("MODEL", BUNDLED_OLLAMA_MODEL),
                         help="Ollama model or LM Studio/llama.cpp model id")
     parser.add_argument("--gguf", default=env.get("GGUF", ""),
@@ -242,6 +246,7 @@ def parse_args(argv=None, environ=None, home: Path | None = None) -> InstallerOp
         force_wizard=bool(parsed.force_wizard),
         browser_setup=bool(parsed.browser_setup),
         skip_check=bool(parsed.skip_check),
+        offline=bool(parsed.offline),
         model_was_set=bool(env.get("MODEL")) or _has_argument(raw_argv, "--model"),
         ctx_was_set=bool(env.get("CTX")),
         max_steps_was_set=bool(env.get("MAX_STEPS")),
@@ -673,7 +678,9 @@ def find_ollama(which=shutil.which, home: Path | None = None) -> str:
         return str(found)
     home = Path(home) if home is not None else Path.home()
     for candidate in (home / ".local" / "bin" / "ollama",
-                      Path("/usr/local/bin/ollama"), Path("/usr/bin/ollama")):
+                      home / "bin" / "ollama",
+                      Path("/usr/local/bin/ollama"), Path("/usr/bin/ollama"),
+                      Path("/opt/ollama/bin/ollama"), Path("/snap/bin/ollama")):
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     return ""
@@ -885,6 +892,12 @@ def ensure_model(options: InstallerOptions, *, root: Path = ROOT,
 
     ollama = find_ollama(which, home)
     if not ollama:
+        if options.offline:
+            print("Offline mode: Ollama was not found in PATH, "
+                  "~/.local/bin, ~/bin, /usr/local/bin, /usr/bin, "
+                  "/opt/ollama/bin or /snap/bin, so nothing was downloaded.")
+            print("Install Ollama or re-run without --offline.")
+            return 1
         print("Installing Ollama…")
         installer = ollama_installer or install_ollama_user_local
         installed = installer(home=home, environ=env)
@@ -970,6 +983,11 @@ def ensure_model(options: InstallerOptions, *, root: Path = ROOT,
               file=sys.stderr)
         return 1
 
+    if options.offline:
+        print(f"Offline mode: model '{options.model}' is not installed and "
+              "no local GGUF was found, so nothing was downloaded.")
+        print("Import it with:  python3 setup_model.py /path/to/model.gguf")
+        return 1
     if options.model == BUNDLED_OLLAMA_MODEL:
         print("Bundled GGUF was not found; downloading SmolLM2 135M from Ollama…")
         options.model = "smollm2:135m"

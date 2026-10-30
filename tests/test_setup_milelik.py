@@ -335,5 +335,14 @@ class TestSetupMilelikScript(unittest.TestCase):
         self.assertIn("sudo does not bypass", stderr.getvalue())
 
 
+class TestSetupMilelikOffline(unittest.TestCase):
+    def test_offline_flag_is_forwarded_to_installer(self):
+        args = setup.parse_args(["--offline"])
+        self.assertTrue(args.offline)
+        command = setup.build_install_command(args, root=ROOT,
+                                              interactive_terminal=False)
+        self.assertIn("--offline", command)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1231,5 +1231,18 @@ class TestBundledDependencies(unittest.TestCase):
             (), True, True, {"frontend_enabled": False}))
 
 
+class TestOfflineMode(unittest.TestCase):
+    def test_offline_mode_reads_env(self):
+        self.assertFalse(milelik.offline_mode({}))
+        self.assertFalse(milelik.offline_mode({"MILELIK_OFFLINE": "0"}))
+        self.assertFalse(milelik.offline_mode({"MILELIK_OFFLINE": "no"}))
+        for value in ("1", "true", "yes", "y", "on", "  YeS  "):
+            self.assertTrue(milelik.offline_mode({"MILELIK_OFFLINE": value}), value)
+
+    def test_offline_mode_defaults_to_process_env(self):
+        self.assertEqual(milelik.offline_mode(),
+                         milelik.offline_mode(dict(os.environ)))
+
+
 if __name__ == "__main__":
     unittest.main()

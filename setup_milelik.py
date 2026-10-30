@@ -850,6 +850,8 @@ def build_install_command(args, root: Path = ROOT, interactive_terminal=False):
 
     if args.skip_check:
         command.append("--skip-check")
+    if args.offline:
+        command.append("--offline")
     if args.dependency_mode:
         command.extend(["--dependency-mode", args.dependency_mode])
     if args.model:
@@ -965,6 +967,8 @@ def parse_args(argv=None):
                         help="print the setup/launch commands without running them")
     parser.add_argument("--skip-check", action="store_true",
                         help="tell the installer not to run its final milelik --check")
+    parser.add_argument("--offline", action="store_true",
+                        help="tell the installer to never download Ollama or models")
     parser.add_argument("--check", action="store_true",
                         help="run milelik --check and exit (does not install unless --install is also used)")
     parser.add_argument("--list-models", action="store_true",
