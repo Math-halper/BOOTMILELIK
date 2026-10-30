@@ -186,6 +186,12 @@ class TestMilelikWebServer(unittest.TestCase):
                 data = payload
             return e.code, data, e.headers
 
+    def test_unauthorized_message_points_at_terminal_link(self):
+        status, data, _headers = self.request("/api/status", token="wrong-token")
+        self.assertEqual(status, 401)
+        self.assertIn("terminal link", data["error"])
+        self.assertIn("Preferences", data["error"])
+
     def test_frontend_and_authentication(self):
         status, page, _headers = self.request("/", token=None)
         self.assertEqual(status, 200)
@@ -605,6 +611,38 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             self.assertFalse(list(home.rglob("*.sh")))
             self.assertTrue((home / ".local" / "share" / "applications" / "milelik-workspace.desktop").is_file())
             self.assertIn(" nodejs ", " " + apt_log.read_text() + " ")
+
+
+class TestWebTokenPersistence(unittest.TestCase):
+    def test_token_file_is_stable_and_private(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "web_token"
+            first = web.load_or_create_web_token(target)
+            self.assertTrue(first)
+            second = web.load_or_create_web_token(target)
+            self.assertEqual(first, second)
+            self.assertEqual(oct(target.stat().st_mode & 0o777), "0o600")
+
+    def test_token_regenerates_when_file_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "web_token"
+            target.write_text("\n")
+            token = web.load_or_create_web_token(target)
+            self.assertTrue(token)
+            self.assertEqual(web.load_or_create_web_token(target), token)
+
+    def test_token_path_lives_beside_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp}):
+                self.assertEqual(web.web_token_path(),
+                                 Path(tmp) / "milelik" / "web_token")
+
+    def test_auth_cookie_is_persistent_and_httponly(self):
+        cookie = web.web_auth_cookie("abc123")
+        self.assertIn("milelik_token=abc123", cookie)
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+        self.assertIn("Max-Age=", cookie)
 
 
 if __name__ == "__main__":
