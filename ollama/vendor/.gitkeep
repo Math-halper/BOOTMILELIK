@@ -1,0 +1,5 @@
+# Vendored Ollama release chunks live here after a one-time:
+#   python3 ollama/fetch_ollama.py
+# Each *.partNN chunk stays under GitHub's 100 MB file limit; together with
+# ollama/vendor.json they let fresh machines install Ollama fully offline via:
+#   python3 ollama/setup_ollama.py --offline

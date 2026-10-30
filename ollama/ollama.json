@@ -1,0 +1,31 @@
+{
+  "runtime": "ollama",
+  "pinned_version": "v0.40.13",
+  "project": "https://ollama.com",
+  "source": "https://github.com/ollama/ollama",
+  "download_base": "https://github.com/ollama/ollama/releases/download/v0.40.13",
+  "checksum_file": "sha256sum.txt",
+  "architectures": {
+    "amd64": {
+      "asset": "ollama-linux-amd64.tar.zst",
+      "platform_machine": ["x86_64", "amd64", "x64", "intel64"],
+      "description": "64-bit x86 PCs: Intel and AMD processors. The 'amd64' in the file name is the standard linux name for 64-bit x86 and runs on Intel CPUs. Do NOT use a -rocm file unless you have an AMD graphics card.",
+      "size_mb_approx": 1455
+    },
+    "arm64": {
+      "asset": "ollama-linux-arm64.tar.zst",
+      "platform_machine": ["aarch64", "arm64"],
+      "description": "64-bit ARM PCs such as Raspberry Pi 5 and ARM laptops.",
+      "size_mb_approx": 1509
+    }
+  },
+  "unsupported": {
+    "platform_machine": ["i386", "i686", "x86", "armv7l", "armv6l"],
+    "reason": "Ollama only publishes 64-bit builds. 32-bit x86 (i386/i686) and 32-bit ARM cannot run Ollama; use a 64-bit OS install instead."
+  },
+  "notes": [
+    "The 1.4 GB runtime archive is NOT stored in Git; this manifest pins the version and file names so every Milelik install downloads the exact same tested release.",
+    "The plain 'amd64' archive already includes NVIDIA GPU support and CPU fallback. The separate '-rocm' archive is only for AMD graphics cards.",
+    "Milelik verifies the downloaded archive against the release's sha256sum.txt before extracting it."
+  ]
+}

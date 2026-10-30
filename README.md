@@ -102,14 +102,31 @@ file's own metadata. Additional model binaries inside `models/` are ignored by
 Git; the bundled SmolLM2 GGUF is the one intentional tracked exception — see
 [`models/README.md`](models/README.md).
 
-Three ways to run it — use whichever matches what you already have:
+Four ways to run it — use whichever matches what you already have:
+
+**0. Built-in engine (easiest — no Ollama install at all).** The repo
+vendors a small CPU inference server plus an Ollama-compatible front:
+```bash
+python3 engine/serve.py   # terminal 1: engine on 127.0.0.1:11434 + :8080
+milelik "check my disk"   # terminal 2: works with zero configuration
+```
+See [`engine/`](engine/README.md). Fully offline, ideal for a fresh
+linux Mint box.
 
 **1. Ollama (default)** — the Python installer imports the bundled GGUF for
 you, or manually:
 ```bash
-python3 setup_model.py
+python3 ollama/setup_ollama.py   # installs the pinned Ollama runtime (~/.local)
+python3 setup_model.py           # imports models/smollm2-135m-instruct-q4_1.gguf
 milelik "check my disk space, memory, and local IP"
 ```
+Ollama itself is vendored in [`ollama/`](ollama/README.md): run
+`python3 ollama/fetch_ollama.py` once on a machine with internet and the
+real release bytes (split into verified ~90 MB chunks) live in the repo,
+so a fresh Mint box installs with `python3 ollama/setup_ollama.py
+--offline` — no downloads, no package manager. On an x86 PC the
+`linux/amd64` file is fetched — that name is the standard linux label for
+64-bit x86 and is the correct build for **Intel** CPUs too, not AMD-only.
 You can also pass the bundled model by any of its names — it is translated:
 ```bash
 milelik --model SmolLM2-135M-Instruct-Q4_1 "check my disk"

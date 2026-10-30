@@ -694,14 +694,72 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def ollama_download_base(env=None, root=ROOT) -> tuple[str, str]:
+    """Return ``(base_url, source_label)`` for the Ollama release archive.
+
+    Preference order: the ``OLLAMA_DOWNLOAD_BASE`` environment override,
+    the version pinned in the repository's ``ollama/ollama.json`` manifest,
+    then Ollama's rolling latest-release URL.
+    """
+    env = os.environ if env is None else env
+    override = str(env.get("OLLAMA_DOWNLOAD_BASE", "") or "").strip().rstrip("/")
+    if override:
+        return override, "OLLAMA_DOWNLOAD_BASE"
+    try:
+        manifest = json.loads((Path(root) / "ollama" / "ollama.json").read_text(
+            encoding="utf-8"))
+        base = str(manifest.get("download_base", "") or "").strip().rstrip("/")
+        if base:
+            pinned = manifest.get("pinned_version", "")
+            label = f"ollama/ollama.json ({pinned})" if pinned else "ollama/ollama.json"
+            return base, label
+    except (OSError, ValueError):
+        pass
+    return ("https://github.com/ollama/ollama/releases/latest/download",
+            "Ollama latest release")
+
+
+def _load_ollama_setup_module():
+    """Import ollama/setup_ollama.py for vendored-runtime support, or None."""
+    script = ROOT / "ollama" / "setup_ollama.py"
+    if not script.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("milelik_ollama_setup", script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ValueError, ImportError, AttributeError):
+        return None
+
+
+def _find_matching_vendored_ollama(filename: str):
+    """Return ``(setup_module, vendor_dir, vendor)`` for a matching asset.
+
+    Returns None when no usable vendored Ollama chunks for ``filename``
+    are committed in ollama/vendor/.
+    """
+    setup_module = _load_ollama_setup_module()
+    if setup_module is None:
+        return None
+    try:
+        found = setup_module.find_vendored()
+    except ValueError:
+        return None
+    if found is None or found[1].get("asset") != filename:
+        return None
+    return setup_module, found[0], found[1]
+
+
 def install_ollama_user_local(home: Path | None = None, *, environ=None,
                               opener=urllib.request.urlopen,
                               machine=platform.machine) -> Path | None:
     """Install Ollama under ~/.local without running a shell script.
 
-    This downloads Ollama's official linux release archive, verifies its
-    published SHA-256 when the checksum file is available, and extracts it
-    with the system zstd/tar commands.
+    This assembles the vendored ollama/vendor/ chunks when they are
+    committed (fully offline), and otherwise downloads Ollama's official
+    linux release archive, verifies its published SHA-256 when the
+    checksum file is available, and extracts it with zstd/tar.
     """
     env = os.environ if environ is None else environ
     arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(
@@ -719,31 +777,45 @@ def install_ollama_user_local(home: Path | None = None, *, environ=None,
     home = Path(home) if home is not None else Path.home()
     destination = home / ".local"
     filename = f"ollama-linux-{arch}.tar.zst"
-    base = str(env.get(
-        "OLLAMA_DOWNLOAD_BASE",
-        "https://github.com/ollama/ollama/releases/latest/download")).rstrip("/")
+    base, base_source = ollama_download_base(env, ROOT)
+    if arch == "amd64":
+        print("Using Ollama's linux/amd64 build (correct for Intel and AMD 64-bit PCs).")
+
+    vendored = _find_matching_vendored_ollama(filename)
 
     try:
         with tempfile.TemporaryDirectory(prefix="milelik-ollama-") as tmp:
             archive = Path(tmp) / filename
-            print(f"Downloading Ollama for linux/{arch}…")
-            _download_to_file(f"{base}/{filename}", archive, opener=opener)
-
-            try:
-                sums_path = Path(tmp) / "sha256sum.txt"
-                _download_to_file(f"{base}/sha256sum.txt", sums_path, opener=opener)
-                expected = ""
-                for line in sums_path.read_text(encoding="utf-8", errors="replace").splitlines():
-                    parts = line.split()
-                    if len(parts) >= 2 and Path(parts[-1]).name == filename:
-                        expected = parts[0].lower()
-                        break
-                if expected and _sha256(archive) != expected:
-                    print("The downloaded Ollama archive failed its SHA-256 check.",
+            if vendored is not None:
+                setup_module, vendor_dir, vendor = vendored
+                print(f"Assembling vendored Ollama {vendor.get('pinned_version', '')} "
+                      f"for linux/{arch} (offline, no download)…")
+                try:
+                    setup_module.assemble_archive(vendor_dir, vendor, archive)
+                except ValueError as error:
+                    print(f"Vendored Ollama chunks are unusable: {error}",
                           file=sys.stderr)
                     return None
-            except (OSError, urllib.error.URLError):
-                print("Warning: could not fetch Ollama's checksum file; continuing.")
+                print("Vendored Ollama chunks verified (SHA-256).")
+            else:
+                print(f"Downloading Ollama for linux/{arch} from {base_source}…")
+                _download_to_file(f"{base}/{filename}", archive, opener=opener)
+
+                try:
+                    sums_path = Path(tmp) / "sha256sum.txt"
+                    _download_to_file(f"{base}/sha256sum.txt", sums_path, opener=opener)
+                    expected = ""
+                    for line in sums_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                        parts = line.split()
+                        if len(parts) >= 2 and Path(parts[-1]).name == filename:
+                            expected = parts[0].lower()
+                            break
+                    if expected and _sha256(archive) != expected:
+                        print("The downloaded Ollama archive failed its SHA-256 check.",
+                              file=sys.stderr)
+                        return None
+                except (OSError, urllib.error.URLError):
+                    print("Warning: could not fetch Ollama's checksum file; continuing.")
 
             (destination / "bin").mkdir(parents=True, exist_ok=True)
             old_lib = destination / "lib" / "ollama"
@@ -989,6 +1061,14 @@ def install_files(options: InstallerOptions, *, root: Path = ROOT,
     if (root / "svg-images").is_dir():
         _replace_tree(root / "svg-images", app_dir / "svg-images")
 
+    if (root / "engine").is_dir():
+        _replace_tree(root / "engine", app_dir / "engine")
+        for mode_name, mode in (("llama-server", 0o755), ("serve.py", 0o755),
+                                ("ollama_compat.py", 0o644)):
+            candidate = app_dir / "engine" / mode_name
+            if candidate.is_file():
+                candidate.chmod(mode)
+
     models_dest = app_dir / "models"
     models_dest.mkdir(parents=True, exist_ok=True)
     for extra in ("README.md", ".gitkeep", "LICENSE-SmolLM2-Apache-2.0.txt"):
@@ -1024,6 +1104,7 @@ def install_files(options: InstallerOptions, *, root: Path = ROOT,
         "milelik-setup": app_dir / "setup_milelik.py",
         "milelik-install": app_dir / "install_milelik.py",
         "milelik-model-setup": app_dir / "setup_model.py",
+        "milelik-engine": app_dir / "engine" / "serve.py",
         "milelik-uninstall": app_dir / "uninstall_milelik.py",
     }
     for name, target in launcher_targets.items():

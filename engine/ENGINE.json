@@ -1,0 +1,41 @@
+{
+  "engine": "milelik-engine",
+  "upstream": "https://github.com/ggml-org/llama.cpp",
+  "tag": "v0.8.0",
+  "commit": "6ebec9ad2a90f270f0db4a8669c18511d2e82995",
+  "source_tarball": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/refs/tags/v0.8.0",
+  "source_sha256": "51b1e025d7b12e83fa55736e65bc254acd9d23e49f546be7531368fef82210ee",
+  "build": {
+    "date": "2026-10-30",
+    "os": "Debian 12 (glibc 2.36)",
+    "compiler": "GNU 12.2.0",
+    "cmake": "4.4.4",
+    "target": "llama-server",
+    "strip": true,
+    "flags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=OFF",
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_OPENMP=OFF",
+      "-DLLAMA_CURL=OFF",
+      "-DLLAMA_BUILD_TESTS=OFF"
+    ]
+  },
+  "binary": {
+    "path": "engine/llama-server",
+    "size_bytes": 14188384,
+    "sha256": "439fdf3cc70354f9de58285d93965393afead566a20d0ca2ee5de9ee75f66c14"
+  },
+  "runtime_requires": [
+    "x86-64 CPU",
+    "glibc >= 2.36",
+    "libstdc++",
+    "libm",
+    "libgcc_s (all shipped by default on linux Mint 22.x)"
+  ],
+  "notes": [
+    "Portable CPU-only build: no CUDA, no OpenMP, no curl, no -march=native.",
+    "Runs on any glibc >= 2.36 system (linux Mint 22.x out of the box).",
+    "Rebuild/audit steps: engine/README.md. Upgrade: bump tag, rebuild, refresh binary hash."
+  ]
+}
