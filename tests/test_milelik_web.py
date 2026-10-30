@@ -486,8 +486,20 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
             'class="milelik-sprite"', 'class="sprite-eye sprite-eye-left"',
             'class="sprite-eye sprite-eye-right"', 'class="sprite-mouth"',
             'class="sprite-pixels"', "black-and-white angular glitch companion",
+            'class="sprite-shelf"', 'class="sprite-leg sprite-leg-left"',
+            'class="sprite-leg sprite-leg-right"',
+            'transform="rotate(-9 137 298)"',
+            'transform="rotate(-20 184 298)"',
+            "sitting on a shelf with his seat behind the shelf front",
         ):
             self.assertIn(needle, sprite)
+        self.assertNotIn("terminal", sprite.lower())
+        self.assertLess(
+            sprite.index("<!-- hoodie -->"),
+            sprite.index('class="sprite-shelf"'))
+        self.assertLess(
+            sprite.index('class="sprite-shelf"'),
+            sprite.index('class="sprite-leg sprite-leg-left"'))
         self.assertIn("function setSpriteState", js)
         for state in ('"thinking"', '"talking"', '"glitch"', '"alert"', '"sleep"'):
             self.assertIn(state, js)

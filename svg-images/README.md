@@ -6,7 +6,7 @@ Keep every new SVG image here and give each file a descriptive
 
 | File | Used for |
 | --- | --- |
-| `milelik-companion.svg` | The black-and-white monitor-cat companion in the main front end and browser setup. It is inlined at serve time so the existing CSS can animate its eyes, mouth and pixel accents for the idle, thinking, talking, glitch, alert and sleep states. |
+| `milelik-companion.svg` | The black-and-white monitor-cat companion sitting on a wall shelf in the main front end and browser setup, with his seat behind the shelf front and his booted legs angled over it. It is inlined at serve time so the existing CSS can animate its eyes, mouth and pixel accents for the idle, thinking, talking, glitch, alert and sleep states. |
 | `milelik-icon.svg` | The browser/favicon icon for the main front end and browser setup. The servers also return it for the legacy `/favicon.svg` and `/favicon.ico` requests. |
 
 Do not add PNG, JPG, GIF, WebP, BMP or ICO sprite images. If another sprite is

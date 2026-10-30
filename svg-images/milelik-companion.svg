@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" class="milelik-sprite" viewBox="-8 0 336 380" role="img" aria-labelledby="spriteTitle spriteDesc" focusable="false">
   <title id="spriteTitle">Milelik companion sprite</title>
-  <desc id="spriteDesc">An original black-and-white angular glitch companion with a monitor-cat head, hoodie, boots and cable tail.</desc>
+  <desc id="spriteDesc">An original black-and-white angular glitch companion with a monitor-cat head and hoodie, sitting on a shelf with his seat behind the shelf front and his booted legs angled over it.</desc>
   <g class="sprite-pixels" aria-hidden="true">
     <rect x="38" y="91" width="17" height="7" fill="#050506"/>
     <rect x="50" y="103" width="18" height="18" fill="#050506"/>
@@ -10,12 +10,10 @@
     <rect x="278" y="141" width="18" height="8" fill="#f6f4ec"/>
     <rect x="39" y="251" width="9" height="9" fill="#050506"/>
     <rect x="56" y="272" width="34" height="6" fill="#5f6066"/>
-    <rect x="35" y="292" width="30" height="7" fill="#f6f4ec"/>
-    <rect x="64" y="311" width="18" height="18" fill="#050506"/>
-    <rect x="273" y="286" width="11" height="11" fill="#f6f4ec"/>
+    <rect x="16" y="344" width="28" height="7" fill="#f6f4ec"/>
+    <rect x="286" y="344" width="16" height="16" fill="#050506"/>
+    <rect x="278" y="262" width="11" height="11" fill="#f6f4ec"/>
   </g>
-
-  <ellipse cx="160" cy="359" rx="92" ry="11" fill="#000" opacity=".34"/>
 
   <!-- segmented cable tail -->
   <path d="M205 304 C238 309 259 287 254 252 C251 230 260 215 276 218" fill="none" stroke="#050506" stroke-width="25" stroke-linecap="round"/>
@@ -26,21 +24,9 @@
     <rect x="306" y="205" width="14" height="15" rx="3" fill="#d9d8d2" stroke="#050506" stroke-width="4"/>
   </g>
 
-  <!-- legs -->
-  <path d="M123 292 L151 292 L148 330 L121 330 Z" fill="#b9babd" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M170 292 L198 292 L201 330 L173 330 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
-
-  <!-- boots -->
-  <path d="M112 317 L150 317 L158 344 C159 354 153 359 143 359 L103 359 C96 359 92 354 94 345 C97 330 103 320 112 317 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M171 317 L209 317 C218 320 224 330 227 345 C229 354 225 359 218 359 L178 359 C168 359 162 354 163 344 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M95 350 L157 350 L157 359 L103 359 C98 359 94 355 95 350 Z" fill="#111216"/>
-  <path d="M164 350 L226 350 C227 355 223 359 218 359 L164 359 Z" fill="#111216"/>
-  <ellipse cx="119" cy="338" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
-  <ellipse cx="201" cy="338" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
-
-  <!-- right arm behind torso -->
-  <path d="M208 235 C224 248 233 262 236 278" fill="none" stroke="#050506" stroke-width="29" stroke-linecap="round"/>
-  <path d="M208 235 C224 248 233 262 236 278" fill="none" stroke="#24252a" stroke-width="20" stroke-linecap="round"/>
+  <!-- right sleeve behind the torso -->
+  <path d="M207 232 C224 246 235 263 240 282" fill="none" stroke="#050506" stroke-width="26" stroke-linecap="round"/>
+  <path d="M207 232 C224 246 235 263 240 282" fill="none" stroke="#24252a" stroke-width="17" stroke-linecap="round"/>
 
   <!-- hoodie -->
   <path d="M107 222 C121 210 139 205 160 205 C181 205 199 210 213 222 L221 286 C222 299 214 306 201 306 L119 306 C106 306 98 299 99 286 Z" fill="#17181c" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
@@ -55,15 +41,39 @@
   <path d="M112 219 C95 210 78 198 64 181 L77 165 C90 182 104 193 120 202 Z" fill="#24252a" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
   <path d="M78 176 C90 189 102 199 114 206" fill="none" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
 
-  <!-- terminal in right paw -->
-  <g transform="rotate(5 226 278)">
-    <rect x="199" y="250" width="54" height="62" rx="8" fill="#101114" stroke="#050506" stroke-width="5"/>
-    <rect x="206" y="257" width="40" height="48" rx="5" fill="#050506" stroke="#55565c" stroke-width="2"/>
-    <path d="M213 272 L223 279 L213 286" fill="none" stroke="#f6f4ec" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="226" y="286" width="13" height="4" fill="#f6f4ec"/>
+  <!-- wall shelf, drawn over Milelik's seat -->
+  <g class="sprite-shelf" aria-hidden="true">
+    <path d="M58 328 L58 359 L91 330" fill="none" stroke="#050506" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M58 328 L58 359 L91 330" fill="none" stroke="#77787e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M262 328 L262 359 L229 330" fill="none" stroke="#050506" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M262 328 L262 359 L229 330" fill="none" stroke="#77787e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M32 290 L14 305 L20 329 L32 314 Z" fill="#55565c" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M288 290 L306 305 L300 329 L288 314 Z" fill="#55565c" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M32 290 L288 290 L306 305 L14 305 Z" fill="#d9d8d2" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M14 305 L306 305 L300 329 L20 329 Z" fill="#33343a" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <circle cx="38" cy="317" r="3" fill="#d9d8d2"/>
+    <circle cx="282" cy="317" r="3" fill="#d9d8d2"/>
   </g>
-  <path d="M218 296 C226 287 242 289 246 299 C250 309 242 319 231 318 C220 317 213 305 218 296 Z" fill="#c9cac9" stroke="#050506" stroke-width="4"/>
-  <path d="M226 299 L238 302 M224 308 L237 309" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- right paw resting on the shelf -->
+  <path d="M229 282 C236 273 252 274 257 283 C261 292 254 301 243 300 C232 299 224 291 229 282 Z" fill="#c9cac9" stroke="#050506" stroke-width="4"/>
+  <path d="M235 284 L246 287 M233 293 L245 294" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- booted legs angled over the shelf front -->
+  <g class="sprite-leg sprite-leg-left" transform="rotate(-9 137 298)">
+    <path d="M123 294 L151 294 L149 332 L121 332 Z" fill="#b9babd" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M122 315 L150 315" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+    <path d="M112 318 L150 318 L158 345 C159 355 153 360 143 360 L103 360 C96 360 92 355 94 346 C97 331 103 321 112 318 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M95 351 L157 351 L157 360 L103 360 C98 360 94 356 95 351 Z" fill="#111216"/>
+    <ellipse cx="119" cy="339" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
+  </g>
+  <g class="sprite-leg sprite-leg-right" transform="rotate(-20 184 298)">
+    <path d="M170 294 L198 294 L201 332 L173 332 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M171 315 L200 315" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
+    <path d="M171 318 L209 318 C218 321 224 331 227 346 C229 355 225 360 218 360 L178 360 C168 360 162 355 163 345 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M164 351 L226 351 C227 356 223 360 218 360 L164 360 Z" fill="#111216"/>
+    <ellipse cx="201" cy="339" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
+  </g>
 
   <!-- ears -->
   <path d="M88 82 C88 57 94 38 105 27 C118 38 132 57 141 77 L119 94 C101 94 88 91 88 82 Z" fill="#d9d8d2" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
