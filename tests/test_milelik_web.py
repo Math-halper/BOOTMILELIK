@@ -510,6 +510,9 @@ class TestFrontendAssetsAndInstaller(unittest.TestCase):
         self.assertFalse((ROOT / "frontend" / "favicon.svg").exists())
         favicon = (svg_images_dir / "milelik-icon.svg").read_text()
         self.assertTrue(favicon.lstrip().startswith("<svg"))
+        for artwork in (sprite, favicon):
+            self.assertNotIn("gradient", artwork.lower())
+            self.assertNotIn("url(#", artwork)
         self.assertIn('type="image/svg+xml" href="/svg-images/milelik-icon.svg"', html)
         combined = (html + sprite + favicon + js + css).lower()
         self.assertNotIn("<img", combined)

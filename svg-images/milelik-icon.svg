@@ -1,17 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">Milelik</title>
-  <defs>
-    <linearGradient id="iconShell" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f7f5ee"/>
-      <stop offset=".55" stop-color="#c9cac9"/>
-      <stop offset="1" stop-color="#828389"/>
-    </linearGradient>
-  </defs>
   <rect width="64" height="64" rx="8" fill="#08090b"/>
-  <path d="M16 20 L18 7 L29 16 L25 23 Z" fill="url(#iconShell)" stroke="#050506" stroke-width="2.4" stroke-linejoin="round"/>
-  <path d="M48 20 L46 7 L35 16 L39 23 Z" fill="url(#iconShell)" stroke="#050506" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M16 20 L18 7 L29 16 L25 23 Z" fill="#d9d8d2" stroke="#050506" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M48 20 L46 7 L35 16 L39 23 Z" fill="#d9d8d2" stroke="#050506" stroke-width="2.4" stroke-linejoin="round"/>
   <path d="M20 17 L20 12 L25 17 Z M44 17 L44 12 L39 17 Z" fill="#f7f5ee"/>
-  <rect x="11" y="16" width="42" height="37" rx="10" fill="url(#iconShell)" stroke="#050506" stroke-width="2.6"/>
+  <rect x="11" y="16" width="42" height="37" rx="10" fill="#d9d8d2" stroke="#050506" stroke-width="2.6"/>
   <rect x="7" y="29" width="5" height="13" rx="2.5" fill="#a9aaad" stroke="#050506" stroke-width="2"/>
   <rect x="52" y="29" width="5" height="13" rx="2.5" fill="#a9aaad" stroke="#050506" stroke-width="2"/>
   <path d="M29 17 C28 13 30 10 33 9 C33 12 35 13 37 14 C34 15 31 17 29 17 Z" fill="#d9d8d2" stroke="#050506" stroke-width="1.8" stroke-linejoin="round"/>

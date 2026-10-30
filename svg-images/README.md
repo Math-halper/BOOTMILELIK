@@ -2,7 +2,7 @@
 
 All of Milelik's project-owned SVG artwork lives in this folder.
 Keep every new SVG image here and give each file a descriptive
-`milelik-*.svg` name.
+`milelik-*.svg` name. Use flat colours only: no gradients.
 
 | File | Used for |
 | --- | --- |

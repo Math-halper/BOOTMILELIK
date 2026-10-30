@@ -1,27 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" class="milelik-sprite" viewBox="-8 0 336 380" role="img" aria-labelledby="spriteTitle spriteDesc" focusable="false">
   <title id="spriteTitle">Milelik companion sprite</title>
   <desc id="spriteDesc">An original black-and-white angular glitch companion with a monitor-cat head, hoodie, boots and cable tail.</desc>
-  <defs>
-    <linearGradient id="spriteShell" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f7f5ee"/>
-      <stop offset=".48" stop-color="#c9cac9"/>
-      <stop offset="1" stop-color="#7d7e84"/>
-    </linearGradient>
-    <linearGradient id="spriteBody" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#d9d6cc"/>
-    </linearGradient>
-    <linearGradient id="spriteBoot" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#e7e6e0"/>
-      <stop offset="1" stop-color="#8e9096"/>
-    </linearGradient>
-    <linearGradient id="spriteTail" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#76777d"/>
-      <stop offset=".5" stop-color="#e2e1da"/>
-      <stop offset="1" stop-color="#77787e"/>
-    </linearGradient>
-  </defs>
-
   <g class="sprite-pixels" aria-hidden="true">
     <rect x="38" y="91" width="17" height="7" fill="#050506"/>
     <rect x="50" y="103" width="18" height="18" fill="#050506"/>
@@ -40,7 +19,7 @@
 
   <!-- segmented cable tail -->
   <path d="M205 304 C238 309 259 287 254 252 C251 230 260 215 276 218" fill="none" stroke="#050506" stroke-width="25" stroke-linecap="round"/>
-  <path d="M205 304 C238 309 259 287 254 252 C251 230 260 215 276 218" fill="none" stroke="url(#spriteTail)" stroke-width="16" stroke-linecap="round"/>
+  <path d="M205 304 C238 309 259 287 254 252 C251 230 260 215 276 218" fill="none" stroke="#c9cac9" stroke-width="16" stroke-linecap="round"/>
   <path d="M226 300 L223 315 M247 281 L238 293 M255 254 L241 257 M253 231 L240 226" stroke="#55565c" stroke-width="4" stroke-linecap="round"/>
   <g transform="translate(-24 5) rotate(38 295 215)">
     <rect x="278" y="199" width="34" height="27" rx="6" fill="#17181c" stroke="#050506" stroke-width="5"/>
@@ -52,8 +31,8 @@
   <path d="M170 292 L198 292 L201 330 L173 330 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
 
   <!-- boots -->
-  <path d="M112 317 L150 317 L158 344 C159 354 153 359 143 359 L103 359 C96 359 92 354 94 345 C97 330 103 320 112 317 Z" fill="url(#spriteBoot)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M171 317 L209 317 C218 320 224 330 227 345 C229 354 225 359 218 359 L178 359 C168 359 162 354 163 344 Z" fill="url(#spriteBoot)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M112 317 L150 317 L158 344 C159 354 153 359 143 359 L103 359 C96 359 92 354 94 345 C97 330 103 320 112 317 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M171 317 L209 317 C218 320 224 330 227 345 C229 354 225 359 218 359 L178 359 C168 359 162 354 163 344 Z" fill="#c9cac9" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
   <path d="M95 350 L157 350 L157 359 L103 359 C98 359 94 355 95 350 Z" fill="#111216"/>
   <path d="M164 350 L226 350 C227 355 223 359 218 359 L164 359 Z" fill="#111216"/>
   <ellipse cx="119" cy="338" rx="17" ry="7" fill="#f7f5ee" opacity=".72"/>
@@ -65,7 +44,7 @@
 
   <!-- hoodie -->
   <path d="M107 222 C121 210 139 205 160 205 C181 205 199 210 213 222 L221 286 C222 299 214 306 201 306 L119 306 C106 306 98 299 99 286 Z" fill="#17181c" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M119 219 C132 213 146 211 160 211 C174 211 188 213 201 219 L207 285 C208 294 203 298 195 298 L125 298 C117 298 112 294 113 285 Z" fill="url(#spriteBody)"/>
+  <path d="M119 219 C132 213 146 211 160 211 C174 211 188 213 201 219 L207 285 C208 294 203 298 195 298 L125 298 C117 298 112 294 113 285 Z" fill="#f6f4ec"/>
   <path d="M126 271 L139 282 L181 282 L194 271 L198 298 L122 298 Z" fill="#efeee8" stroke="#77787e" stroke-width="3" stroke-linejoin="round"/>
   <path d="M145 224 L141 245 M175 224 L179 245" stroke="#17181c" stroke-width="4" stroke-linecap="round"/>
   <circle cx="141" cy="249" r="3.5" fill="#17181c"/>
@@ -87,13 +66,13 @@
   <path d="M226 299 L238 302 M224 308 L237 309" stroke="#55565c" stroke-width="3" stroke-linecap="round"/>
 
   <!-- ears -->
-  <path d="M88 82 C88 57 94 38 105 27 C118 38 132 57 141 77 L119 94 C101 94 88 91 88 82 Z" fill="url(#spriteShell)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M88 82 C88 57 94 38 105 27 C118 38 132 57 141 77 L119 94 C101 94 88 91 88 82 Z" fill="#d9d8d2" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
   <path d="M101 72 C102 59 106 48 112 41 C119 50 126 61 130 71 C121 79 109 80 101 72 Z" fill="#f7f5ee"/>
-  <path d="M232 82 C232 57 226 38 215 27 C202 38 188 57 179 77 L201 94 C219 94 232 91 232 82 Z" fill="url(#spriteShell)" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M232 82 C232 57 226 38 215 27 C202 38 188 57 179 77 L201 94 C219 94 232 91 232 82 Z" fill="#d9d8d2" stroke="#050506" stroke-width="5" stroke-linejoin="round"/>
   <path d="M219 72 C218 59 214 48 208 41 C201 50 194 61 190 71 C199 79 211 80 219 72 Z" fill="#f7f5ee"/>
 
   <!-- monitor head -->
-  <rect x="75" y="68" width="170" height="143" rx="30" fill="url(#spriteShell)" stroke="#050506" stroke-width="6"/>
+  <rect x="75" y="68" width="170" height="143" rx="30" fill="#d9d8d2" stroke="#050506" stroke-width="6"/>
   <rect x="61" y="119" width="18" height="49" rx="9" fill="#a9aaad" stroke="#050506" stroke-width="5"/>
   <rect x="241" y="119" width="18" height="49" rx="9" fill="#a9aaad" stroke="#050506" stroke-width="5"/>
   <!-- waving paw, in front of the left side knob -->
