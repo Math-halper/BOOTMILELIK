@@ -9,11 +9,11 @@ and install by hand.
 | Dependency type | Included in the repository as | Installed/used by |
 |---|---|---|
 | Python packages | None — `requirements.txt` and `pyproject.toml` declare zero third-party packages | Not applicable; Python 3.10+ standard library only |
-| Core system packages | [`apt-required.txt`](apt-required.txt) | [`install-dependencies.sh`](install-dependencies.sh) |
-| VLC/media, desktop, LibreOffice, Git/GitHub, Node/npm and Python project packages | [`apt-tools.txt`](apt-tools.txt) | `install-dependencies.sh` (the default full mode) |
-| Extra fallback programs | [`apt-optional.txt`](apt-optional.txt) | `install-dependencies.sh --with-optional` |
-| Ollama runtime | Bootstrap logic in [`../install.sh`](../install.sh) | The main installer |
-| Qwen2.5-Coder model | Model identity/template/setup logic in [`../milelik.py`](../milelik.py), [`../setup-model.sh`](../setup-model.sh) and [`../Modelfile.qwen2.5-coder-abliterated`](../Modelfile.qwen2.5-coder-abliterated), plus the user-supplied [`../models/`](../models/) folder read at startup | The main installer / Milelik startup discovery, from an existing GGUF or the Ollama library |
+| Core system packages | [`apt-required.txt`](apt-required.txt) | [`install_dependencies.py`](install_dependencies.py) |
+| VLC/media, desktop, LibreOffice, Git/GitHub, Node/npm and Python project packages | [`apt-tools.txt`](apt-tools.txt) | `install_dependencies.py` (the default full mode) |
+| Extra fallback programs | [`apt-optional.txt`](apt-optional.txt) | `install_dependencies.py --with-optional` |
+| Ollama runtime | Python bootstrap logic in [`../install_milelik.py`](../install_milelik.py) | The main Python installer |
+| Qwen2.5-Coder model | Model identity/template/setup logic in [`../milelik.py`](../milelik.py), [`../setup_model.py`](../setup_model.py) and [`../Modelfile.qwen2.5-coder-abliterated`](../Modelfile.qwen2.5-coder-abliterated), plus the user-supplied [`../models/`](../models/) folder read at startup | The main installer / Milelik startup discovery, from an existing GGUF or the Ollama library |
 | LM Studio / llama.cpp | Optional alternative model servers detected by `milelik.py` | The user, only if they prefer them to Ollama |
 
 ## Install or verify the system packages
@@ -23,28 +23,28 @@ dependency installer directly:
 
 ```bash
 # Full set: required packages + app/VLC/desktop/GitHub/LibreOffice tools
-./dependencies/install-dependencies.sh
+python3 dependencies/install_dependencies.py
 
 # Core runtime only
-./dependencies/install-dependencies.sh --required
+python3 dependencies/install_dependencies.py --required
 
 # Full set plus optional fallback screenshot/wallpaper programs
-./dependencies/install-dependencies.sh --with-optional
+python3 dependencies/install_dependencies.py --with-optional
 
 # Verify packages and commands without changing anything
-./dependencies/install-dependencies.sh --check
+python3 dependencies/install_dependencies.py --check
 
 # Show the resolved package list
-./dependencies/install-dependencies.sh --list
+python3 dependencies/install_dependencies.py --list
 ```
 
-`./install.sh` accepts:
+`python3 install_milelik.py --yes` accepts:
 
 ```bash
-DEPENDENCY_MODE=full ./install.sh           # default
-DEPENDENCY_MODE=with-optional ./install.sh  # also install apt-optional.txt
-DEPENDENCY_MODE=required ./install.sh       # core packages only
-DEPENDENCY_MODE=none ./install.sh           # skip apt; manage packages yourself
+DEPENDENCY_MODE=full python3 install_milelik.py --yes           # default
+DEPENDENCY_MODE=with-optional python3 install_milelik.py --yes  # also install apt-optional.txt
+DEPENDENCY_MODE=required python3 install_milelik.py --yes       # core packages only
+DEPENDENCY_MODE=none python3 install_milelik.py --yes           # skip apt; manage packages yourself
 ```
 
 ## Why apt packages are declared rather than copied as binaries
@@ -58,8 +58,9 @@ dependencies for the installed Mint release; checking hundreds of
 megabytes of distribution binaries into Git would be brittle and would
 go stale.
 
-The same principle applies to the Ollama runtime and the roughly
-4.7 GB model weights: the scripts in this repository install them from
-their upstream distribution points, or import the user's existing
+The same principle applies to the Ollama runtime and large optional
+model weights: Milelik's Python installer downloads/imports them from
+their upstream distribution points, or imports the user's existing
 `Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf`, rather than storing
-the large binary artifacts in Git.
+those artifacts in Git. The small bundled SmolLM2 GGUF is the exception
+and is already in `models/`.

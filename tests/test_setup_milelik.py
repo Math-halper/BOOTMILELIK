@@ -2,10 +2,13 @@
 import contextlib
 import importlib.util
 import io
+import json
 import sys
 from types import SimpleNamespace
 import tempfile
 import unittest
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,7 +26,7 @@ class TestSetupMilelikScript(unittest.TestCase):
             "--workspace", "/tmp/ws", "--web-port", "9876",
         ])
         command = setup.build_install_command(args, root=ROOT, interactive_terminal=False)
-        self.assertEqual(command[:2], ["bash", str(ROOT / "install.sh")])
+        self.assertEqual(command[:2], [sys.executable, str(ROOT / "install_milelik.py")])
         self.assertIn("--yes", command)
         launch_index = command.index("--launch")
         self.assertEqual(command[launch_index + 1], "none")
@@ -31,6 +34,164 @@ class TestSetupMilelikScript(unittest.TestCase):
         self.assertIn("/tmp/models", command)
         self.assertIn("Other.gguf", command)
         self.assertIn("9876", command)
+
+    def test_browser_setup_flags_and_installer_command(self):
+        args = setup.parse_args(["--browser-setup"])
+        self.assertTrue(args.browser_setup)
+        self.assertFalse(args.terminal_setup)
+        command = setup.build_install_command(
+            args, root=ROOT, interactive_terminal=True)
+        self.assertIn("--yes", command)
+        self.assertNotIn("--wizard", command)
+        self.assertTrue(setup.display_available({"DISPLAY": ":0"}))
+        self.assertFalse(setup.display_available({}))
+
+        def unexpected_input(_prompt):
+            raise AssertionError("browser dry-run should not ask terminal questions")
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = setup.main(
+                ["--browser-setup", "--dry-run", "--install-only"],
+                runner=lambda *_args, **_kwargs: SimpleNamespace(returncode=99),
+                input_fn=unexpected_input,
+                stdin_isatty=True,
+                stdout_isatty=True,
+                installed_command=None,
+                euid=1000,
+            )
+        self.assertEqual(code, 0)
+        self.assertIn("would open Milelik browser setup", output.getvalue())
+
+    def test_browser_setup_form_applies_choices(self):
+        args = setup.parse_args(["--browser-setup"])
+        form = {
+            "action": ["install"], "dependency_mode": ["none"],
+            "model_source": ["auto"], "gguf": [""], "model": [""],
+            "backend": ["auto"], "host": [""], "models_dir": [""],
+            "model_file": [""], "model_discovery": ["1"],
+            "performance_profile": ["fast"], "frontend_enabled": ["1"],
+            "workspace": ["/tmp/milelik-ws"], "web_host": ["127.0.0.1"],
+            "web_port": ["9876"], "open_browser": ["1"],
+            "ui_theme": ["dark"], "ui_default_view": ["workspace"],
+            "launch": ["gui"],
+        }
+        result = setup.apply_browser_setup_form(args, form)
+        self.assertEqual(result["action"], "install")
+        self.assertEqual(args.dependency_mode, "none")
+        self.assertEqual(args.web_port, 9876)
+        self.assertEqual(args.launch, "gui")
+        self.assertEqual(result["env"]["PERFORMANCE_PROFILE"], "fast")
+        self.assertEqual(result["env"]["UI_DEFAULT_VIEW"], "workspace")
+
+    def test_browser_setup_http_page_uses_svg_and_collects_choices(self):
+        args = setup.parse_args(["--browser-setup"])
+        core = setup.load_core(ROOT)
+        opened = []
+        session = setup.start_browser_setup(
+            args, core=core, root=ROOT,
+            browser_open=lambda url: opened.append(url) or True)
+        try:
+            self.assertEqual(opened, [session.url])
+            with urllib.request.urlopen(session.url, timeout=10) as response:
+                page = response.read().decode()
+                cookie = response.headers.get("Set-Cookie", "").split(";")[0]
+            self.assertIn('class="milelik-sprite"', page)
+            self.assertIn(
+                'type="image/svg+xml" href="/svg-images/milelik-icon.svg"', page)
+            self.assertNotIn("<img", page.lower())
+            self.assertNotIn(".png", page.lower())
+            self.assertEqual(
+                setup.load_sprite_svg(ROOT),
+                (ROOT / "svg-images" / "milelik-companion.svg").read_text())
+            with urllib.request.urlopen(
+                    session.url.split("?")[0].rstrip("/")
+                    + "/svg-images/milelik-icon.svg", timeout=10) as response:
+                self.assertEqual(response.headers.get_content_type(),
+                                 "image/svg+xml")
+                self.assertEqual(
+                    response.read().decode(), setup.load_app_icon_svg(ROOT))
+
+            form = {
+                "token": session.token, "action": "install",
+                "dependency_mode": "none", "model_source": "auto",
+                "backend": "auto", "model_discovery": "1",
+                "performance_profile": "balanced", "frontend_enabled": "1",
+                "workspace": "/tmp/milelik-ws", "web_host": "127.0.0.1",
+                "web_port": "9876", "open_browser": "1",
+                "ui_theme": "system", "ui_default_view": "chat",
+                "launch": "gui",
+            }
+            request = urllib.request.Request(
+                session.url.split("?")[0].rstrip("/") + "/setup",
+                data=urllib.parse.urlencode(form).encode(),
+                headers={"Cookie": cookie,
+                         "Content-Type": "application/x-www-form-urlencoded"})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                progress = response.read().decode()
+            self.assertIn("Setting up Milelik", progress)
+            result = session.wait()
+            self.assertEqual(result["action"], "install")
+            self.assertEqual(args.web_port, 9876)
+
+            request = urllib.request.Request(
+                session.url.split("?")[0].rstrip("/") + "/status",
+                headers={"Cookie": cookie})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                status = json.load(response)
+            self.assertEqual(status["phase"], "installing")
+        finally:
+            session.complete("complete", "Test complete", delay=0)
+
+    def test_main_browser_setup_runs_installer_without_terminal_wizard(self):
+        calls = []
+
+        class FakeSession:
+            def __init__(self, args):
+                self.args = args
+                self.completed = []
+
+            def wait(self):
+                self.args.dependency_mode = "none"
+                self.args.web_port = 9876
+                return {"action": "install",
+                        "env": {"MODEL_SOURCE": "auto",
+                                "UI_THEME": "dark"}}
+
+            def set_phase(self, phase, message):
+                self.completed.append((phase, message))
+
+            def complete(self, phase, message, delay=1.0):
+                self.completed.append((phase, message))
+
+        session_holder = {}
+
+        def starter(args, **_kwargs):
+            session_holder["session"] = FakeSession(args)
+            return session_holder["session"]
+
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(returncode=0)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = setup.main(
+                ["--browser-setup", "--install-only"],
+                runner=runner,
+                stdin_isatty=False,
+                stdout_isatty=False,
+                installed_command=None,
+                euid=1000,
+                browser_setup_starter=starter,
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--yes", calls[0][0])
+        self.assertNotIn("--wizard", calls[0][0])
+        self.assertEqual(calls[0][1]["env"]["UI_THEME"], "dark")
+        self.assertEqual(calls[0][1]["env"]["MILELIK_BROWSER_SETUP_ACTIVE"], "1")
+        self.assertEqual(session_holder["session"].completed[-1][0], "complete")
 
     def test_launch_commands_for_gui_cli_task_and_installed_binary(self):
         gui = setup.parse_args(["--run-only", "--source", "--web-port", "9999"])
@@ -117,7 +278,7 @@ class TestSetupMilelikScript(unittest.TestCase):
             )
         text = output.getvalue()
         self.assertEqual(code, 0)
-        self.assertNotIn("install.sh", text)
+        self.assertNotIn("install_milelik.py", text)
         self.assertIn("milelik.py --gui", text)
 
     def test_installer_cancellation_prevents_launch(self):
@@ -140,7 +301,7 @@ class TestSetupMilelikScript(unittest.TestCase):
             )
         self.assertEqual(code, 0)
         self.assertEqual(len(calls), 1)
-        self.assertIn("install.sh", " ".join(calls[0][0]))
+        self.assertIn("install_milelik.py", " ".join(calls[0][0]))
         self.assertIn("Setup cancelled", output.getvalue())
 
     def test_root_is_rejected_with_python3_without_sudo_instructions(self):

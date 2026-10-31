@@ -15,9 +15,9 @@ No cloud API, no API keys, no pip dependencies - Python 3.10+ standard
 library only, which is what linux Mint ships with.
 
 Quick start:
-    ./install.sh                 # installs dependencies + Ollama + model + `milelik`
+    python3 setup_milelik.py     # browser setup + Python installer + web app
+    milelik                      # open the Milelik web app
     milelik "find the 10 biggest folders in my home directory"
-    milelik --interactive
 """
 
 from __future__ import annotations
@@ -46,16 +46,25 @@ import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
-# The model Milelik is tuned for out of the box. Note the Ollama library
-# spells the repo "abliterate", while the Hugging Face GGUF file uses
-# "abliterated" - Milelik accepts either name (see resolve_ollama_model_name).
+# Milelik's bundled, ready-to-run default is the tiny Apache-2.0
+# HuggingFaceTB SmolLM2 135M Instruct GGUF supplied in models/. It is fast
+# and private, but necessarily much weaker at coding/tool use than a larger
+# model. The Qwen2.5-Coder target below remains fully supported as an
+# optional upgrade. Note the Ollama library spells that repo "abliterate",
+# while the Hugging Face GGUF file uses "abliterated" - Milelik accepts
+# either name (see resolve_ollama_model_name).
+BUNDLED_MODEL_FILENAME = "smollm2-135m-instruct-q4_1.gguf"
+BUNDLED_MODEL_LABEL = "SmolLM2-135M-Instruct-Q4_1"
+BUNDLED_MODEL_STEM = "smollm2-135m-instruct-q4_1"
+BUNDLED_MODEL_OLLAMA_NAME = "milelik-smollm2:135m"
 TARGET_MODEL_LABEL = "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M"
 TARGET_GGUF_FILENAME = TARGET_MODEL_LABEL + ".gguf"
 OLLAMA_TARGET_MODEL = "huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M"
-LOCAL_IMPORTED_MODEL = "milelik-coder:7b"   # name used when importing a GGUF
-DEFAULT_MODEL = OLLAMA_TARGET_MODEL
+LOCAL_IMPORTED_MODEL = "milelik-coder:7b"   # Qwen GGUF import name
+DEFAULT_MODEL = BUNDLED_MODEL_OLLAMA_NAME
+DEFAULT_MODEL_FILE = BUNDLED_MODEL_FILENAME
 DEFAULT_HOST = "http://127.0.0.1:11434"
 LMSTUDIO_HOST = "http://127.0.0.1:1234"
 LLAMACPP_HOST = "http://127.0.0.1:8080"
@@ -79,7 +88,7 @@ MAX_TOOL_OUTPUT = 8000          # chars of tool output fed back to the model
 MAX_DOWNLOAD_BYTES = 2_000_000  # cap web downloads at ~2 MB
 USER_AGENT = f"Milelik/{__version__} (+https://github.com/Math-halper/BOOTMILELIK)"
 _APP_DIR = Path(__file__).resolve().parent
-DEPENDENCY_INSTALLER = _APP_DIR / "dependencies" / "install-dependencies.sh"
+DEPENDENCY_INSTALLER = _APP_DIR / "dependencies" / "install_dependencies.py"
 
 
 def dependency_install_command() -> str:
@@ -92,12 +101,12 @@ def dependency_install_command() -> str:
     the user an ad-hoc list of apt packages.
     """
     if not DEPENDENCY_INSTALLER.exists():
-        return "./install.sh"
+        return "python3 setup_milelik.py"
     try:
         command = "./" + str(DEPENDENCY_INSTALLER.relative_to(Path.cwd().resolve()))
     except ValueError:
         command = str(DEPENDENCY_INSTALLER)
-    return shlex.quote(command)
+    return "python3 " + shlex.quote(command)
 
 # ---------------------------------------------------------------------------
 # Terminal colours (disabled automatically when output is not a TTY)
@@ -196,15 +205,27 @@ def is_target_model(name: str) -> bool:
     return ("qwen25coder" in k and "abliterat" in k
             and ("7b" in k or "q4km" in k or "instruct" in k))
 
+def is_bundled_default_model(name: str) -> bool:
+    """True for Milelik's bundled SmolLM2 135M Q4_1 default model."""
+    if not name:
+        return False
+    if name.strip().lower() in (BUNDLED_MODEL_OLLAMA_NAME,
+                                BUNDLED_MODEL_FILENAME.lower()):
+        return True
+    k = model_key(name)
+    return "smollm2" in k and "135m" in k and "q41" in k
+
 _OTHER_QUANTS = ("q80", "q6k", "q5km", "q5ks", "q40", "q3km", "q2k", "iq4", "fp16", "f16", "bf16")
 _OTHER_SIZES = ("05b", "15b", "3b", "14b", "32b")
 
 def resolve_ollama_model_name(name: str) -> str:
-    """Map any alias of the target model to its Ollama-library tag."""
+    """Map bundled-model aliases to their import name and Qwen aliases to Ollama."""
     if not name:
         return DEFAULT_MODEL
     raw = name.strip()
     k = model_key(raw)
+    if is_bundled_default_model(raw):
+        return BUNDLED_MODEL_OLLAMA_NAME
     if "qwen25coder" in k and "abliterat" in k:
         if any(q in k for q in _OTHER_QUANTS) and "q4km" not in k:
             return raw                      # a different quant - leave it alone
@@ -238,8 +259,15 @@ def find_model_match(requested: str, available):
                 score += 5
             if "q4km" in ak:
                 score += 5
+        if is_bundled_default_model(requested) and "smollm2" in ak and "135m" in ak:
+            score += 30
+            if "q41" in ak or str(a).lower() == BUNDLED_MODEL_OLLAMA_NAME:
+                score += 10
         if score > best_score:
             best, best_score = a, score
+    if is_bundled_default_model(requested):
+        return best if best and "smollm2" in model_key(best) \
+            and "135m" in model_key(best) else None
     if is_target_model(requested):
         return best if best and "qwen25coder" in model_key(best) \
             and "abliterat" in model_key(best) else None
@@ -331,6 +359,8 @@ def _split_gguf_info(path: Path):
 def ollama_name_for_model_file(path, size: int | None = None) -> str:
     """A stable, unique Ollama name for an imported local model file."""
     p = Path(path)
+    if is_bundled_default_model(p.name):
+        return BUNDLED_MODEL_OLLAMA_NAME
     if is_target_model(p.name):
         return LOCAL_IMPORTED_MODEL
     stem = p.stem
@@ -510,6 +540,8 @@ def _model_file_record(path: Path, root: Path, parts=None,
             "" if runnable_container else
             "Milelik's Ollama/LM Studio/llama.cpp runtimes use GGUF files"),
         "is_target": is_target_model(path.name),
+        "is_bundled_default": is_bundled_default_model(path.name),
+        "is_default": is_bundled_default_model(path.name),
         "is_qwen25_coder": is_qwen25_coder(path.name) or (
             str(metadata.get("general.architecture", "")).lower() == "qwen2"
             and "coder" in display_name.lower()),
@@ -623,6 +655,7 @@ def discover_model_files(directories=None, cfg: dict | None = None) -> list[dict
 
     records.sort(key=lambda r: (
         0 if r.get("supported") else 1,
+        0 if r.get("is_bundled_default") else 1,
         0 if r.get("is_target") else 1,
         str(r.get("name", "")).lower(),
     ))
@@ -649,6 +682,10 @@ def find_model_file(requested: str, records) -> dict | None:
             return record
         if requested_path is not None and str(requested_path) == str(record.get("path", "")):
             return record
+    if is_bundled_default_model(raw):
+        for record in records:
+            if record.get("is_bundled_default"):
+                return record
     if is_target_model(raw):
         for record in records:
             if record.get("is_target"):
@@ -863,7 +900,7 @@ def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODE
         err(f"Invalid Ollama model name: {ollama_name!r}")
         return False
     if not shutil.which("ollama"):
-        err("`ollama` command not found. Run ./install.sh first.")
+        err("`ollama` command not found. Run python3 setup_milelik.py first.")
         return False
 
     shards = _gguf_shards(path)
@@ -3948,9 +3985,10 @@ class OllamaClient:
         self.host = normalise_host(host)
         self.model = resolve_ollama_model_name(model)
         self.ctx = ctx
-        # Low temperature / tight sampling makes a 7B coder far more
+        # Low temperature / tight sampling makes small local models far more
         # reliable at emitting exactly-formatted tool calls.
-        self.temperature = 0.1 if is_qwen25_coder(self.model) else temperature
+        self.temperature = 0.1 if is_qwen25_coder(self.model) or \
+            is_bundled_default_model(self.model) else temperature
         self.keep_alive = keep_alive
 
     def _request(self, path: str, payload: dict | None = None, timeout: int = 300):
@@ -3973,7 +4011,7 @@ class OllamaClient:
         except urllib.error.URLError as e:
             raise OllamaError(
                 f"Cannot reach Ollama at {self.host} ({getattr(e, 'reason', e)}).\n"
-                f"Is it running? Try:  ollama serve    (or ./install.sh)")
+                f"Is it running? Try:  ollama serve    (or python3 setup_milelik.py)")
 
     def tags(self, timeout: int = 10):
         data = self._request("/api/tags", timeout=timeout)
@@ -4042,7 +4080,7 @@ class OllamaClient:
     def pull(self, model: str | None = None) -> bool:
         model = resolve_ollama_model_name(model or self.model)
         if not shutil.which("ollama"):
-            err("`ollama` command not found. Run ./install.sh first.")
+            err("`ollama` command not found. Run python3 setup_milelik.py first.")
             return False
         info(f"Downloading model {c_bold(model)} (this can take a few minutes)…")
         try:
@@ -4075,7 +4113,7 @@ class OllamaClient:
 
     def chat(self, messages, use_tools: bool = True) -> dict:
         options = {"temperature": self.temperature, "num_ctx": self.ctx}
-        if is_qwen25_coder(self.model):
+        if is_qwen25_coder(self.model) or is_bundled_default_model(self.model):
             options.update({"top_p": 0.8, "top_k": 20, "repeat_penalty": 1.05})
         payload = {
             "model": self.model,
@@ -4113,7 +4151,7 @@ class OpenAIClient:
         self.model = model or ""
         self.ctx = ctx
         self.temperature = 0.1 if is_qwen25_coder(model) or is_target_model(model) \
-            else temperature
+            or is_bundled_default_model(model) else temperature
         self.api_key = (api_key or os.environ.get("MILELIK_API_KEY")
                         or os.environ.get("OPENAI_API_KEY") or "local")
         self._model_resolved = False
@@ -4199,8 +4237,9 @@ class OpenAIClient:
 
     def pull(self, model: str | None = None) -> bool:
         err("Models can't be downloaded through LM Studio/llama.cpp from here.")
-        print(f"Either load {TARGET_GGUF_FILENAME} in LM Studio, or use Ollama:\n"
-              f"  ollama pull {OLLAMA_TARGET_MODEL}")
+        print(f"Either load {BUNDLED_MODEL_FILENAME} in LM Studio, or use Ollama "
+              "with Milelik's bundled model:\n"
+              f"  milelik --import-gguf models/{BUNDLED_MODEL_FILENAME}")
         return False
 
     @staticmethod
@@ -4253,10 +4292,10 @@ class OpenAIClient:
 
     def chat(self, messages, use_tools: bool = True) -> dict:
         if not self._model_resolved and \
-                (not self.model or is_target_model(self.model)):
-            # Prefer the server's exact id for the loaded GGUF, e.g.
-            # "qwen2.5-coder-7b-instruct-abliterated-q4_k_m".
-            self.resolve_available_model(self.model or TARGET_MODEL_LABEL,
+                (not self.model or is_target_model(self.model)
+                 or is_bundled_default_model(self.model)):
+            # Prefer the server's exact id for the loaded GGUF.
+            self.resolve_available_model(self.model or BUNDLED_MODEL_LABEL,
                                          update=True)
         payload = {
             "model": self.model,
@@ -4264,7 +4303,8 @@ class OpenAIClient:
             "stream": False,
             "temperature": self.temperature,
         }
-        if is_qwen25_coder(self.model) or is_target_model(self.model):
+        if is_qwen25_coder(self.model) or is_target_model(self.model) or \
+                is_bundled_default_model(self.model):
             payload["top_p"] = 0.8
         if use_tools:
             payload["tools"] = TOOLS
@@ -4340,10 +4380,11 @@ def build_system_prompt(toolbox: Toolbox, model: str = "") -> str:
     today = datetime.date.today().isoformat()
     tool_names = ", ".join(TOOL_NAMES)
     qwen_block = ""
-    if is_qwen25_coder(model) or is_target_model(model):
-        # Qwen2.5-Coder was trained on exactly this <tool_call> format;
-        # state it bluntly (and one call per reply) or the 7B tends to
-        # narrate a plan and emit several speculative calls at once.
+    if is_qwen25_coder(model) or is_target_model(model) or \
+            is_bundled_default_model(model):
+        # Small local models need the tool format stated bluntly (and one
+        # call per reply), or they tend to narrate a plan and emit several
+        # speculative calls at once.
         qwen_block = """
 
 TOOL FORMAT - follow this exactly:
@@ -4431,10 +4472,11 @@ class Agent:
             self.messages.insert(0, {"role": "system", "content": prompt})
 
     def _one_tool_at_a_time(self) -> bool:
-        # A 7B model reasons much better seeing one result at a time than
+        # Small models reason much better seeing one result at a time than
         # firing off a batch of guessed calls in parallel.
         model = getattr(self.client, "model", "")
-        return is_qwen25_coder(model) or is_target_model(model)
+        return is_qwen25_coder(model) or is_target_model(model) or \
+            is_bundled_default_model(model)
 
     def _trim_history(self):
         """Keep the conversation small enough to stay fast / inside context."""
@@ -4577,7 +4619,7 @@ def default_config() -> dict:
         "backend": "auto",
         "host": "",
         "models_dir": "",
-        "model_file": "",
+        "model_file": DEFAULT_MODEL_FILE,
         "model_discovery": True,
         "ctx": DEFAULT_CTX,
         "max_steps": DEFAULT_MAX_STEPS,
@@ -4711,9 +4753,9 @@ def run_check(client, requested_model: str = "", local_models=None,
     print(c_bold("Milelik check"))
     print(f"  Python : {platform.python_version()}")
     print(f"  OS     : {distro_name()}")
-    print(f"  Target : {TARGET_MODEL_LABEL}")
+    print(f"  Default: {BUNDLED_MODEL_LABEL} (bundled in models/)")
     requested_model = requested_model or getattr(client, "model", "") \
-        or TARGET_MODEL_LABEL
+        or BUNDLED_MODEL_LABEL
 
     # Probe every local backend, so the user can see where their model is.
     probes = [
@@ -4741,8 +4783,8 @@ def run_check(client, requested_model: str = "", local_models=None,
         except OllamaError:
             models = []
         found = probe.resolve_available_model(requested_model, update=False)
-        mark = c_green(f"Up - target model found as '{found}'") if found \
-            else c_yellow("Up - target model NOT loaded/installed here")
+        mark = c_green(f"Up - requested model found as '{found}'") if found \
+            else c_yellow("Up - requested model NOT loaded/installed here")
         print(f"  {label:<10} {probe.host}  {mark}")
         if models:
             shown = ", ".join(models[:6]) + ("…" if len(models) > 6 else "")
@@ -4772,9 +4814,9 @@ def run_check(client, requested_model: str = "", local_models=None,
         ok = False
         print(c_red("  No local model server is reachable"))
         print("    Fix (pick one):")
-        print(f"      ollama pull {OLLAMA_TARGET_MODEL}   # then: ollama serve")
-        print("      ./setup-model.sh ~/Downloads/" + TARGET_GGUF_FILENAME)
-        print("      …or load the GGUF in LM Studio and start its server (port 1234)")
+        print("      python3 setup_model.py   # imports the bundled SmolLM2 GGUF")
+        print("      ollama serve          # if Ollama is installed but stopped")
+        print(f"      …or load {BUNDLED_MODEL_FILENAME} in LM Studio and start its server (port 1234)")
     elif client.model_available():
         print(c_green(f"  Selected model '{client.model}' is available"))
     else:
@@ -4782,11 +4824,13 @@ def run_check(client, requested_model: str = "", local_models=None,
         print(c_yellow(f"  Selected model '{client.model}' is not available "
                        "on the selected backend"))
         if getattr(client, "backend", "") == "ollama":
-            print(f"    Fix:  ollama pull {client.model}")
-            print("          …or import your GGUF:  ./setup-model.sh /path/to/"
-                  + TARGET_GGUF_FILENAME)
+            if is_bundled_default_model(client.model):
+                print("    Fix:  python3 setup_model.py   # imports the bundled GGUF")
+            else:
+                print(f"    Fix:  ollama pull {client.model}")
+                print("          …or import a GGUF:  python3 setup_model.py /path/to/model.gguf")
         else:
-            print(f"    Fix: load {TARGET_GGUF_FILENAME} in LM Studio / "
+            print(f"    Fix: load {BUNDLED_MODEL_FILENAME} in LM Studio / "
                   "llama-server, then re-run.")
 
     print("  Network: ", end="")
@@ -4830,7 +4874,7 @@ def run_check(client, requested_model: str = "", local_models=None,
         f"ready — run `milelik --gui` (http://{web_cfg.get('web_host')}:"
         f"{web_cfg.get('web_port')}, workspace {web_cfg.get('workspace')})"
         if web_ready else
-        "not installed — re-run ./install.sh and enable the front end"))
+        "not installed — re-run python3 setup_milelik.py"))
 
     print(c_green("\nAll good - try:  milelik \"what is my local IP and public IP?\"")
           if ok else c_yellow("\nSomething above needs fixing before Milelik can work."))
@@ -4847,6 +4891,7 @@ def parse_args(argv=None):
         description="Fast local AI assistant for linux Mint (local model + shell, web, apps/VLC and Git/GitHub tools).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""examples:
+  milelik                        # open the Milelik web app
   milelik "find the 10 biggest folders in my home directory"
   milelik "what is my public IP, and is port 22 open on 192.168.1.1?"
   milelik "search the web for how to enable SSH on linux Mint and summarise it"
@@ -4858,15 +4903,17 @@ def parse_args(argv=None):
   milelik --interactive
   milelik --list-models          # models found in Milelik's models/ folder
   milelik --choose-model -i       # choose a model file, then chat
-  milelik --model {TARGET_MODEL_LABEL} "check my disk and memory"
+  milelik --model-file {BUNDLED_MODEL_FILENAME} "check my disk"  # bundled default
+  milelik --model {TARGET_MODEL_LABEL} "write and test code"     # optional Qwen upgrade
   milelik --backend openai --host http://127.0.0.1:1234 "check my disk"   # LM Studio
-  milelik --import-gguf ~/Downloads/{TARGET_GGUF_FILENAME}""")
-    p.add_argument("task", nargs="*", help="Task to perform (omit for interactive mode)")
+  milelik --import-gguf models/{BUNDLED_MODEL_FILENAME}""")
+    p.add_argument("task", nargs="*", help="Task to perform (omit with no other arguments to open the web app)")
     p.add_argument("-i", "--interactive", action="store_true", help="Start the interactive chat")
     p.add_argument("--model", default=os.environ.get("MILELIK_MODEL", cfg.get("model", DEFAULT_MODEL)),
-                   help=f"Model to use (default: {DEFAULT_MODEL}). "
+                   help=f"Model to use (default: {DEFAULT_MODEL}, Milelik's bundled "
+                        f"{BUNDLED_MODEL_LABEL}). The optional "
                         f"'{TARGET_MODEL_LABEL}', its .gguf filename, and its "
-                        "LM Studio / Hugging Face names are all accepted.")
+                        "LM Studio / Hugging Face names are also accepted.")
     p.add_argument("--backend", choices=("auto", "ollama", "openai"),
                    default=os.environ.get("MILELIK_BACKEND",
                                           cfg.get("backend", "auto")),
@@ -4931,18 +4978,19 @@ def parse_args(argv=None):
     p.add_argument("--pull", action="store_true",
                    help="Download the selected model with Ollama and exit")
     p.add_argument("--import-gguf", metavar="PATH", default=None,
-                   help="Import a local GGUF (e.g. " + TARGET_GGUF_FILENAME + ") into "
+                   help="Import a local GGUF (e.g. " + BUNDLED_MODEL_FILENAME + ") into "
                         "Ollama with an appropriate template (Qwen2.5-Coder "
                         "ChatML/tools for Qwen2.5-Coder files), make it "
                         "Milelik's default model, and exit")
-    p.add_argument("--import-name", default=LOCAL_IMPORTED_MODEL,
-                   help=f"Ollama name for --import-gguf (default: {LOCAL_IMPORTED_MODEL})")
+    p.add_argument("--import-name", default=None,
+                   help="Ollama name for --import-gguf (default: automatic based on the file)")
     p.add_argument("--init-config", action="store_true", help="Write a default config file and exit")
     p.add_argument("-v", "--verbose", action="store_true", help="Show full tool output")
     p.add_argument("--no-color", action="store_true", help="Disable colours")
     p.add_argument("--version", action="version", version=f"milelik {__version__}")
     parsed = p.parse_args(argv)
     raw_argv = list(sys.argv[1:] if argv is None else argv)
+    parsed.raw_argv = tuple(raw_argv)
     parsed.explicit_model = any(
         arg == "--model" or arg.startswith("--model=") for arg in raw_argv)
     parsed.explicit_model_file = any(
@@ -4952,6 +5000,18 @@ def parse_args(argv=None):
         arg == "--models-dir" or arg.startswith("--models-dir=")
         for arg in raw_argv)
     return parsed
+
+def should_open_web_app_by_default(raw_argv, stdin_isatty: bool,
+                                   stdout_isatty: bool, cfg: dict | None = None) -> bool:
+    """A bare interactive ``milelik`` invocation opens the web app.
+
+    Piping a task on stdin still works for scripts, and an explicitly
+    disabled front end leaves terminal chat as the fallback.
+    """
+    cfg = cfg or {}
+    return (not tuple(raw_argv or ()) and bool(stdin_isatty)
+            and bool(stdout_isatty) and cfg.get("frontend_enabled", True) is not False)
+
 
 def launch_frontend(args) -> int:
     """Load the sibling web module and run the local front end.
@@ -4963,7 +5023,7 @@ def launch_frontend(args) -> int:
     web_path = Path(__file__).resolve().parent / "milelik_web.py"
     if not web_path.is_file():
         err(f"Milelik's front end is missing: {web_path}")
-        print("Re-run ./install.sh from the Milelik repository.")
+        print("Re-run python3 setup_milelik.py from the Milelik repository.")
         return 1
     import importlib.util
     spec = importlib.util.spec_from_file_location("milelik_web", web_path)
@@ -5002,9 +5062,15 @@ def main(argv=None) -> int:
         print(f"Wrote {write_default_config()}")
         return 0
 
+    if should_open_web_app_by_default(
+            getattr(args, "raw_argv", ()), sys.stdin.isatty(),
+            sys.stdout.isatty(), load_config()):
+        args.gui = True
+
     # Startup model-file discovery: read Milelik's models/ folders and pick
-    # the file the user/config asks for (otherwise the target GGUF, then the
-    # first runnable GGUF). --choose-model opens the terminal chooser.
+    # the file the user/config asks for (otherwise the bundled SmolLM2 GGUF,
+    # then the optional Qwen target, then the first runnable GGUF).
+    # --choose-model opens the terminal chooser.
     startup_cfg = load_config()
     local_model_directories: list[Path] = []
     local_models: list[dict] = []
@@ -5039,12 +5105,14 @@ def main(argv=None) -> int:
                 not show_chooser
                 and (args.explicit_model or selector_is_explicit)),
         )
-        if selector and not selected_local_model and not show_chooser:
-            if selector_is_explicit:
+        selector_resolved = bool(
+            selector and find_model_file(selector, local_models))
+        if selector and not selector_resolved and not show_chooser:
+            if selector_is_explicit and not selected_local_model:
                 err(f"Model file not found in models/: {selector}")
                 print("Run `milelik --list-models` to see the model files Milelik can see.")
                 return 1
-            if not args.explicit_model:
+            if not args.explicit_model and not selector_is_explicit:
                 warn(f"Saved model file is no longer available; ignoring it: {selector}")
         if selected_local_model and not selected_local_model.get("supported"):
             err(f"Selected model file is not runnable: {selected_local_model['path']}")
@@ -5091,8 +5159,8 @@ def main(argv=None) -> int:
             import_physical = ""
         if not import_record or import_record.get("path") != import_physical:
             import_record = model_file_record_for_path(import_path)
-        if args.import_name == LOCAL_IMPORTED_MODEL:
-            args.import_name = import_record.get("ollama_name") or args.import_name
+        if not args.import_name:
+            args.import_name = import_record.get("ollama_name") or LOCAL_IMPORTED_MODEL
         host = args.host if args.host and infer_backend_from_host(args.host) == "ollama" \
             else DEFAULT_HOST
         importer = make_ollama_client(host, args.import_name, args.ctx)
@@ -5151,15 +5219,15 @@ def main(argv=None) -> int:
         if client.backend == "ollama":
             err(f"Ollama isn't running at {client.host}.")
             print("Start it with:  ollama serve\n"
-                  "Or install everything with:  ./install.sh")
+                  "Or install everything with:  python3 setup_milelik.py")
         else:
             err(f"No local model server is running at {client.host}.")
             print("Pick one:\n"
-                  f"  • LM Studio: load {TARGET_GGUF_FILENAME}, then start the "
+                  f"  • LM Studio: load {BUNDLED_MODEL_FILENAME}, then start the "
                   "local server (Developer tab, port 1234)\n"
-                  f"  • llama.cpp: llama-server -m /path/to/{TARGET_GGUF_FILENAME} "
+                  f"  • llama.cpp: llama-server -m models/{BUNDLED_MODEL_FILENAME} "
                   "--host 127.0.0.1 --port 8080 -c 8192 --jinja\n"
-                  f"  • Ollama instead: ollama pull {OLLAMA_TARGET_MODEL}")
+                  "  • Ollama instead: python3 setup_model.py")
         return 1
 
     model_ready = client.model_available()
@@ -5181,12 +5249,15 @@ def main(argv=None) -> int:
     if not model_ready:
         if client.backend == "ollama":
             warn(f"Model '{client.model}' is not installed in Ollama yet.")
+            if is_bundled_default_model(client.model):
+                print("Run:  python3 setup_model.py   # imports Milelik's bundled GGUF")
+                return 1
             print("Already have the GGUF file? Press n, then run:  "
-                  "./setup-model.sh /path/to/" + TARGET_GGUF_FILENAME)
+                  "python3 setup_model.py /path/to/model.gguf")
             if sys.stdin.isatty():
                 try:
-                    ans = input(f"Download it now with `ollama pull {client.model}` "
-                                "(~4.7 GB)? [Y/n] ").strip().lower()
+                    ans = input(f"Download it now with `ollama pull {client.model}`? "
+                                "[Y/n] ").strip().lower()
                 except (EOFError, KeyboardInterrupt):
                     return 1
                 if ans in ("", "y", "yes"):
@@ -5204,7 +5275,7 @@ def main(argv=None) -> int:
                 loaded = []
             err(f"Model '{args.model}' is not loaded at {client.host}.")
             print("Loaded there: " + (", ".join(loaded) if loaded else "(none)"))
-            print(f"Load {TARGET_GGUF_FILENAME} in LM Studio / llama-server, "
+            print(f"Load {BUNDLED_MODEL_FILENAME} in LM Studio / llama-server, "
                   "or pass one of the loaded ids with --model.")
             return 1
 

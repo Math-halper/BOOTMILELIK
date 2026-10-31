@@ -227,11 +227,37 @@ class TestAgainstFakeOllamaServer(unittest.TestCase):
 
 class TestTargetModelNames(unittest.TestCase):
     TARGET = "huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M"
+    BUNDLED = "milelik-smollm2:135m"
 
-    def test_default_model_is_the_target(self):
-        self.assertEqual(milelik.DEFAULT_MODEL, self.TARGET)
+    def test_default_model_is_bundled_smollm2(self):
+        self.assertEqual(milelik.__version__, "1.7.0")
+        self.assertEqual(milelik.DEFAULT_MODEL, self.BUNDLED)
+        self.assertEqual(milelik.DEFAULT_MODEL_FILE,
+                         "smollm2-135m-instruct-q4_1.gguf")
+        self.assertEqual(milelik.BUNDLED_MODEL_LABEL,
+                         "SmolLM2-135M-Instruct-Q4_1")
+        cfg = milelik.default_config()
+        self.assertEqual(cfg["model"], self.BUNDLED)
+        self.assertEqual(cfg["model_file"], milelik.BUNDLED_MODEL_FILENAME)
+        # Qwen remains a supported non-default model.
+        self.assertEqual(milelik.OLLAMA_TARGET_MODEL, self.TARGET)
         self.assertEqual(milelik.TARGET_GGUF_FILENAME,
                          "Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf")
+
+    def test_bundled_aliases_resolve_to_import_name(self):
+        for alias in [
+            "milelik-smollm2:135m",
+            "SmolLM2-135M-Instruct-Q4_1",
+            "smollm2-135m-instruct-q4_1.gguf",
+            "smollm2-135m-instruct-q4_1",
+            "HuggingFaceTB/SmolLM2-135M-Instruct-GGUF:Q4_1",
+        ]:
+            self.assertEqual(milelik.resolve_ollama_model_name(alias),
+                             self.BUNDLED, alias)
+            self.assertTrue(milelik.is_bundled_default_model(alias), alias)
+        # The separate Ollama-library build keeps its own id.
+        self.assertEqual(milelik.resolve_ollama_model_name("smollm2:135m"),
+                         "smollm2:135m")
 
     def test_all_aliases_resolve_to_ollama_tag(self):
         for alias in [
@@ -256,14 +282,22 @@ class TestTargetModelNames(unittest.TestCase):
 
     def test_find_model_match_in_server_ids(self):
         lmstudio_ids = ["llama-3.1-8b-instruct",
+                        "smollm2-135m-instruct-q4_1",
                         "qwen2.5-coder-7b-instruct-abliterated-q4_k_m"]
+        self.assertEqual(
+            milelik.find_model_match(milelik.DEFAULT_MODEL, lmstudio_ids),
+            "smollm2-135m-instruct-q4_1")
         self.assertEqual(
             milelik.find_model_match(milelik.TARGET_MODEL_LABEL, lmstudio_ids),
             "qwen2.5-coder-7b-instruct-abliterated-q4_k_m")
-        llama_cpp_ids = ["/home/user/models/" + milelik.TARGET_GGUF_FILENAME]
+        llama_cpp_ids = ["/home/user/models/" + milelik.BUNDLED_MODEL_FILENAME]
         self.assertEqual(
             milelik.find_model_match(milelik.DEFAULT_MODEL, llama_cpp_ids),
             llama_cpp_ids[0])
+        qwen_ids = ["/home/user/models/" + milelik.TARGET_GGUF_FILENAME]
+        self.assertEqual(
+            milelik.find_model_match(milelik.OLLAMA_TARGET_MODEL, qwen_ids),
+            qwen_ids[0])
         self.assertIsNone(milelik.find_model_match(
             milelik.TARGET_MODEL_LABEL, ["some/other-model:latest"]))
 
@@ -305,6 +339,13 @@ class TestQwenToolFormats(unittest.TestCase):
     def test_system_prompt_teaches_qwen_format(self):
         prompt = milelik.build_system_prompt(milelik.Toolbox(auto=True),
                                              milelik.TARGET_MODEL_LABEL)
+        self.assertIn("<tool_call>", prompt)
+        self.assertIn("ONE tool at a time", prompt)
+        self.assertIn('"name": "run_command"', prompt)
+
+    def test_system_prompt_keeps_bundled_model_to_one_tool(self):
+        prompt = milelik.build_system_prompt(milelik.Toolbox(auto=True),
+                                             milelik.DEFAULT_MODEL)
         self.assertIn("<tool_call>", prompt)
         self.assertIn("ONE tool at a time", prompt)
         self.assertIn('"name": "run_command"', prompt)
@@ -549,6 +590,30 @@ class TestLocalModelFiles(unittest.TestCase):
             # The symlink points at the same physical file and is de-duplicated.
             self.assertEqual(
                 sum(1 for r in records if r["stem"].startswith("Other-")), 1)
+
+    def test_repository_bundled_model_is_the_default_record(self):
+        bundled = ROOT / "models" / milelik.BUNDLED_MODEL_FILENAME
+        self.assertTrue(bundled.is_file(), "bundled default GGUF is missing")
+        self.assertEqual(bundled.stat().st_size, 98_362_432)
+        record = milelik.model_file_record_for_path(bundled)
+        self.assertTrue(record["supported"])
+        self.assertTrue(record["is_bundled_default"])
+        self.assertTrue(record["is_default"])
+        self.assertEqual(record["ollama_name"], milelik.BUNDLED_MODEL_OLLAMA_NAME)
+        self.assertEqual(record["architecture"], "llama")
+        license_text = (ROOT / "models" / "LICENSE-SmolLM2-Apache-2.0.txt").read_text()
+        self.assertIn("SmolLM2-135M-Instruct-Q4_1 model weights only", license_text)
+        self.assertIn("Apache License", license_text)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_gguf(root / milelik.TARGET_GGUF_FILENAME, b"qwen")
+            self._write_gguf(root / milelik.BUNDLED_MODEL_FILENAME, b"smol")
+            records = milelik.discover_model_files([root])
+            self.assertEqual(records[0]["name"], milelik.BUNDLED_MODEL_FILENAME)
+            chosen = milelik.choose_model_file(
+                records, configured_model=milelik.DEFAULT_MODEL)
+            self.assertEqual(chosen["name"], milelik.BUNDLED_MODEL_FILENAME)
 
     def test_gguf_metadata_is_read_without_loading_weights(self):
         import struct
@@ -1067,23 +1132,23 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertIn("dependencies = []", pyproject)
 
     def test_dependency_installer_list_is_complete_and_deduplicated(self):
-        script = ROOT / "dependencies" / "install-dependencies.sh"
+        script = ROOT / "dependencies" / "install_dependencies.py"
         self.assertTrue(os.access(script, os.X_OK))
         result = subprocess.run(
-            [str(script), "--full", "--list"], cwd=ROOT,
+            [sys.executable, str(script), "--full", "--list"], cwd=ROOT,
             text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         packages = result.stdout.splitlines()
         self.assertEqual(len(packages), len(set(packages)))
-        for package in ("python3", "vlc", "playerctl", "gh", "git", "ffmpeg"):
+        for package in ("python3", "vlc", "playerctl", "gh", "git", "ffmpeg", "zstd"):
             self.assertIn(package, packages)
         self.assertTrue(milelik.DEPENDENCY_INSTALLER.exists())
-        self.assertIn("install-dependencies.sh", milelik.dependency_install_command())
+        self.assertIn("install_dependencies.py", milelik.dependency_install_command())
 
     def test_dependency_installer_with_fake_apt_and_check_mode(self):
-        script = ROOT / "dependencies" / "install-dependencies.sh"
+        script = ROOT / "dependencies" / "install_dependencies.py"
         commands = [
-            "python3", "curl", "file", "find", "ip", "ss", "xdg-open",
+            "python3", "curl", "file", "find", "ip", "ss", "zstd", "xdg-open",
             "pgrep", "pkill", "free", "df", "lscpu", "vlc", "playerctl",
             "gh", "git", "ffprobe", "mediainfo", "libreoffice", "notify-send",
             "xclip", "xsel", "wl-copy", "wl-paste", "brightnessctl", "pactl",
@@ -1110,7 +1175,7 @@ class TestBundledDependencies(unittest.TestCase):
             })
 
             install = subprocess.run(
-                [str(script), "--full", "--no-update"], cwd=ROOT, env=env,
+                [sys.executable, str(script), "--full", "--no-update"], cwd=ROOT, env=env,
                 text=True, capture_output=True, timeout=20)
             self.assertEqual(install.returncode, 0, install.stderr)
             self.assertIn("dependencies are ready", install.stdout)
@@ -1121,29 +1186,49 @@ class TestBundledDependencies(unittest.TestCase):
             self.assertIn(" libreoffice ", " " + calls + " ")
 
             check = subprocess.run(
-                [str(script), "--full", "--check"], cwd=ROOT, env=env,
+                [sys.executable, str(script), "--full", "--check"], cwd=ROOT, env=env,
                 text=True, capture_output=True, timeout=20)
             self.assertEqual(check.returncode, 0, check.stderr)
             self.assertIn("All expected dependency commands", check.stdout)
 
     def test_main_installer_uses_and_copies_bundled_dependencies(self):
-        installer = (ROOT / "install.sh").read_text()
-        self.assertIn("dependencies/install-dependencies.sh\" --full", installer)
-        self.assertIn("DEPENDENCY_MODE", installer)
-        self.assertIn('cp -a "$SCRIPT_DIR/dependencies" "$APP_DIR/dependencies"', installer)
-        self.assertIn('requirements.txt pyproject.toml', installer)
-        self.assertIn('run_setup_wizard', installer)
-        self.assertIn('Step 5 of 7 — browser front end and workspace', installer)
-        self.assertIn('cp -a "$SCRIPT_DIR/frontend" "$APP_DIR/frontend"', installer)
-        self.assertIn('milelik_web.py', installer)
-        self.assertIn('milelik-web', installer)
-        self.assertIn('setup_milelik.py', installer)
-        self.assertIn('milelik-setup', installer)
-        self.assertIn('LAUNCH_WAS_SET', installer)
-        self.assertIn('bash "$SCRIPT_DIR/dependencies/install-dependencies.sh" --full', installer)
-        self.assertIn('bash "$SCRIPT_DIR/setup-model.sh"', installer)
-        self.assertIn('python3 "$APP_DIR/milelik.py" --check', installer)
-        self.assertIn('MILELIK_ALLOW_ROOT', installer)
+        installer = (ROOT / "install_milelik.py").read_text()
+        self.assertIn("install_dependencies.py", installer)
+        self.assertIn("dependency_mode", installer)
+        self.assertIn('_replace_tree(root / "dependencies"', installer)
+        self.assertIn('"requirements.txt"', installer)
+        self.assertIn('"pyproject.toml"', installer)
+        self.assertIn("run_setup_wizard", installer)
+        self.assertIn("Step 5 of 7 — browser front end and workspace", installer)
+        self.assertIn('shutil.copytree(root / "frontend"', installer)
+        self.assertIn('_replace_tree(root / "svg-images"', installer)
+        self.assertIn('"app.py"', installer)
+        self.assertIn('"milelik_web.py"', installer)
+        self.assertIn("milelik-web", installer)
+        self.assertIn('"setup_milelik.py"', installer)
+        self.assertIn("milelik-setup", installer)
+        self.assertIn('"setup_model.py"', installer)
+        self.assertIn("milelik-model-setup", installer)
+        self.assertIn('"install_milelik.py"', installer)
+        self.assertIn('"--check"', installer)
+        self.assertIn("MILELIK_ALLOW_ROOT", installer)
+        self.assertIn('BUNDLED_MODEL_FILE = "smollm2-135m-instruct-q4_1.gguf"', installer)
+        self.assertIn('BUNDLED_OLLAMA_MODEL = "milelik-smollm2:135m"', installer)
+        self.assertIn("LICENSE-SmolLM2-Apache-2.0.txt", installer)
+        self.assertIn("--browser-setup", installer)
+        self.assertIn("MILELIK_BROWSER_SETUP_ACTIVE", installer)
+        self.assertFalse(list(ROOT.rglob("*.sh")))
+        model_setup = (ROOT / "setup_model.py").read_text()
+        self.assertIn('TARGET_FILE = "smollm2-135m-instruct-q4_1.gguf"', model_setup)
+        self.assertIn('OLLAMA_LIBRARY_MODEL = "smollm2:135m"', model_setup)
+
+    def test_bare_interactive_invocation_opens_web_app(self):
+        self.assertEqual(milelik.parse_args([]).raw_argv, ())
+        self.assertTrue(milelik.should_open_web_app_by_default((), True, True, {}))
+        self.assertFalse(milelik.should_open_web_app_by_default((), False, True, {}))
+        self.assertFalse(milelik.should_open_web_app_by_default(("task",), True, True, {}))
+        self.assertFalse(milelik.should_open_web_app_by_default(
+            (), True, True, {"frontend_enabled": False}))
 
 
 if __name__ == "__main__":

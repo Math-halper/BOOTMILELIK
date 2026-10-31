@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Milelik — Local AI Workspace</title>
-  <meta name="description" content="Milelik local AI assistant, coding workspace and APIs for linux Mint.">
+  <title>Milelik — Local Companion Workspace</title>
+  <meta name="description" content="Milelik local AI companion, coding workspace and APIs for linux Mint, with bundled SmolLM2.">
+  <link rel="icon" type="image/svg+xml" href="/svg-images/milelik-icon.svg">
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -15,9 +16,25 @@
         <div class="brand-mark" aria-hidden="true">M</div>
         <div>
           <h1>Milelik</h1>
-          <p>Local AI workspace</p>
+          <p>Local companion workspace</p>
         </div>
       </div>
+
+      <section class="companion-card" aria-labelledby="companionTitle">
+        <div class="companion-topline">
+          <span id="companionTitle">MILELIK.SPRITE</span>
+          <span id="spriteStateLabel">BOOT</span>
+        </div>
+        <button id="spriteStage" class="sprite-stage" type="button" data-state="idle" aria-label="Wake Milelik companion and go to chat">
+          <!-- Canonical artwork: svg-images/milelik-companion.svg.
+               milelik_web.py inlines that file here so CSS can animate its parts. -->
+          <!-- MILELIK_COMPANION_SPRITE -->
+        </button>
+        <div class="sprite-bubble" aria-live="polite">
+          <span class="sprite-name">MILELIK</span>
+          <p id="spriteSpeech">Local companion booting. SmolLM2 is bundled in models/.</p>
+        </div>
+      </section>
 
       <div class="status-card">
         <div class="status-line">
@@ -46,7 +63,7 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <p class="eyebrow">linux Mint · local model · workspace</p>
+          <p class="eyebrow">Local companion // linux Mint // bundled SmolLM2</p>
           <h2 id="pageTitle">Chat with Milelik</h2>
         </div>
         <div class="topbar-actions">
@@ -66,8 +83,8 @@
           <article class="card chat-card">
             <div class="card-heading">
               <div>
-                <h3>Ask Milelik to do something</h3>
-                <p>It can inspect this PC, use the network, open apps/VLC, and work with Git/GitHub.</p>
+                <h3>Talk to Milelik</h3>
+                <p>Your desktop companion can inspect this PC, use the network, open apps/VLC, and work with Git/GitHub.</p>
               </div>
               <button id="clearChatBtn" type="button" class="button ghost">Clear chat</button>
             </div>
