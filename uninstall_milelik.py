@@ -35,7 +35,7 @@ def uninstall(home: Path | None = None) -> Path | None:
     app_dir = home / ".local" / "share" / "milelik"
 
     for name in ("milelik", "milelik-web", "milelik-app", "milelik-setup",
-                 "milelik-install", "milelik-model-setup",
+                 "milelik-install", "milelik-model-setup", "milelik-engine",
                  "milelik-uninstall"):
         _remove_file(home / ".local" / "bin" / name)
 

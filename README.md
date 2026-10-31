@@ -102,14 +102,31 @@ file's own metadata. Additional model binaries inside `models/` are ignored by
 Git; the bundled SmolLM2 GGUF is the one intentional tracked exception — see
 [`models/README.md`](models/README.md).
 
-Three ways to run it — use whichever matches what you already have:
+Four ways to run it — use whichever matches what you already have:
+
+**0. Built-in engine (easiest — no Ollama install at all).** The repo
+vendors a small CPU inference server plus an Ollama-compatible front:
+```bash
+python3 engine/serve.py   # terminal 1: engine on 127.0.0.1:11434 + :8080
+milelik "check my disk"   # terminal 2: works with zero configuration
+```
+See [`engine/`](engine/README.md). Fully offline, ideal for a fresh
+linux Mint box.
 
 **1. Ollama (default)** — the Python installer imports the bundled GGUF for
 you, or manually:
 ```bash
-python3 setup_model.py
+python3 ollama/setup_ollama.py   # installs the pinned Ollama runtime (~/.local)
+python3 setup_model.py           # imports models/smollm2-135m-instruct-q4_1.gguf
 milelik "check my disk space, memory, and local IP"
 ```
+Ollama itself is vendored in [`ollama/`](ollama/README.md): run
+`python3 ollama/fetch_ollama.py` once on a machine with internet and the
+real release bytes (split into verified ~90 MB chunks) live in the repo,
+so a fresh Mint box installs with `python3 ollama/setup_ollama.py
+--offline` — no downloads, no package manager. On an x86 PC the
+`linux/amd64` file is fetched — that name is the standard linux label for
+64-bit x86 and is the correct build for **Intel** CPUs too, not AMD-only.
 You can also pass the bundled model by any of its names — it is translated:
 ```bash
 milelik --model SmolLM2-135M-Instruct-Q4_1 "check my disk"
@@ -254,6 +271,23 @@ GGUF=/path/to/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf python3 install_
 MODEL=qwen3:4b python3 install_milelik.py    # smaller/faster, weaker at multi-step tasks
 MODEL=qwen3:14b python3 install_milelik.py   # smarter, slower, needs more RAM/VRAM
 ```
+
+### Fully offline (no internet after install)
+
+Everything Milelik needs is in this repository except the model weights, which
+you supply once. Python is standard-library-only, the front end loads nothing
+from any CDN, and the 14 MB `engine/llama-server` runtime is packaged in
+`engine/`, so after setup nothing phones home:
+
+```bash
+DEPENDENCY_MODE=none python3 install_milelik.py --offline --yes   # install, zero downloads
+python3 engine/serve.py --model /path/to/your.gguf                # local model server, no Ollama needed
+milelik "your task"                                               # talks to the engine on 127.0.0.1:11434
+```
+
+`--offline` / `MILELIK_OFFLINE=1` forbids every download: a missing Ollama
+runtime or model fails with a message instead of fetching. Only the opt-in web
+tools (`fetch_url`, GitHub tools) ever use the network, and only when asked.
 
 ## Web app, workspace and local APIs
 
@@ -543,7 +577,9 @@ run without GitHub/model API tokens in their environment.
 |---|---|
 | `Permission denied` when starting setup, including with `sudo` | Do not run the whole setup as root. From the repository folder run `python3 setup_milelik.py` (not `./setup_milelik.py` and not `sudo`). The `python3` form does not need the script's executable bit. If it still fails, run `findmnt -T . -o TARGET,OPTIONS`; if the options contain `noexec`, move/clone Milelik into your home folder (for example `~/BOOTMILELIK`) and run it there. `chmod +x setup_milelik.py` only fixes a missing executable bit; it cannot override `noexec`. |
 | "No local model server is reachable" | `milelik --check` probes Ollama (11434), LM Studio (1234) and llama.cpp (8080) and shows which is up and where the model was found. Start one: `ollama serve`, LM Studio's server, or `llama-server …`. |
+| Setup downloads Ollama or a model even though both are installed | That only happens when the Ollama program is not found (checked: PATH, `~/.local/bin`, `~/bin`, `/usr/local/bin`, `/usr/bin`, `/opt/ollama/bin`, `/snap/bin`) or the wanted model name is missing. If both are already installed, run setup with `--offline` (or `MILELIK_OFFLINE=1`) and Milelik will use them without downloading anything. |
 | Model not found in Ollama | Run `python3 setup_model.py` to import `models/smollm2-135m-instruct-q4_1.gguf`, or `ollama pull smollm2:135m`. Passing `--model SmolLM2-135M-Instruct-Q4_1` is fine — the name is translated to `milelik-smollm2:135m`. |
+| `ollama create` fails with `error reading GGUF item … string length … exceeds maximum` | The GGUF file itself is corrupt or incompletely downloaded, and Ollama rejects it while parsing. Check any file in one second with `python3 setup_model.py --validate /path/to/model.gguf`, then re-download it and retry. Milelik now runs this check automatically before every import. |
 | Model not found in LM Studio | Actually load the GGUF in LM Studio (not just download it) and start the server, then `milelik --check`. Or pass the exact id LM Studio shows via `--model`. |
 | My model file is not listed | Run `milelik --list-models` and check the folders it prints. Put the file in the repository `models/`, the installed `~/.local/share/milelik/models/`, `./models/` where you launch Milelik, or pass `--models-dir /path/to/models`. Incomplete downloads ending `.part` are ignored. |
 | A file in `models/` says “unsupported” | Milelik's Ollama/LM Studio/llama.cpp path runs GGUF files. Convert SafeTensors/PyTorch weights to GGUF first, and keep all shards of a split GGUF together. |
@@ -556,7 +592,7 @@ run without GitHub/model API tokens in their environment.
 | "Application not found" | Ask it to `list_apps` first to get exact names/ids, or install the app. Flatpak/Snap apps appear once their `.desktop` files are in the standard application dirs. |
 | GitHub says 401/403 / "needs authentication" | Read-only public lookups need no login; writes do. Run `gh auth login`, or set `GITHUB_TOKEN` in your shell profile. 403 can also be rate limiting — being logged in raises the limit a lot. Check with "who am I on GitHub?" / `github_account auth_status`. |
 | GitHub tool says "no repository given" | Run Milelik inside the cloned repo (it reads the `origin` remote), or name it: "…in owner/repo". |
-| Front end says “Connection token needed” | Open it using the complete URL printed by `milelik --gui` (it contains `?token=…` and sets a cookie), or paste the printed token into Preferences → Connection. For scripts, send `X-Milelik-Token`. |
+| Front end says “Connection token needed” | Open it using the complete URL printed by `milelik --gui` (it contains `?token=…` and sets a cookie), or paste the printed token into Preferences → Connection. For scripts, send `X-Milelik-Token`. The token is stable per user (`~/.config/milelik/web_token`; delete it to rotate), so tabs and bookmarks keep working across restarts. |
 | Front-end port is already in use | Another Milelik/server is probably already running. Use the existing browser tab, stop the old process with Ctrl+C, or start `milelik --gui --web-port 8766`. |
 | Front end loads but the model does not | The workspace/APIs work without a model. For Chat, run `ollama serve` or load the GGUF in LM Studio/llama.cpp, then check model/backend/host in Preferences and run `milelik --check`. |
 | JavaScript code will not run in Workspace | Install/check the full bundled dependencies (`python3 dependencies/install_dependencies.py --check`) — it includes Node.js and npm. Python and Bash snippets do not need Node. |

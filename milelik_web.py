@@ -64,6 +64,45 @@ MAX_BODY_BYTES = 3_000_000
 MAX_FILE_BYTES = 2_000_000
 MAX_OUTPUT_CHARS = 20_000
 TOKEN_COOKIE = "milelik_token"
+
+
+def web_token_path() -> Path:
+    """Where the front-end API token is kept (next to config.json)."""
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "milelik" / "web_token"
+
+
+def load_or_create_web_token(path=None) -> str:
+    """Load the stable per-user web token, creating it on first use.
+
+    A stable token (instead of a random one per start) keeps browser tabs,
+    bookmarks and cookies working across Milelik restarts. Delete the file
+    to rotate the token; MILELIK_WEB_TOKEN still overrides it.
+    """
+    target = Path(path) if path is not None else web_token_path()
+    try:
+        saved = target.read_text(encoding="utf-8").strip().split()
+        if saved:
+            return saved[0][:128]
+    except OSError:
+        pass
+    token = secrets.token_urlsafe(24)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(token + "\n", encoding="utf-8")
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+    except OSError:
+        pass
+    return token
+
+
+def web_auth_cookie(token: str) -> str:
+    """Persistent login cookie so the browser survives restarts."""
+    return (f"{TOKEN_COOKIE}={token}; Path=/; HttpOnly; "
+            "SameSite=Strict; Max-Age=31536000")
 TOKEN_HEADER = "X-Milelik-Token"
 SENSITIVE_ENV = {
     "GITHUB_TOKEN", "GH_TOKEN", "MILELIK_API_KEY", "OPENAI_API_KEY",
@@ -783,7 +822,8 @@ class WebState:
         if core_module is None:
             raise RuntimeError("milelik.py could not be imported")
         self.core = core_module
-        self.token = token or os.environ.get("MILELIK_WEB_TOKEN") or secrets.token_urlsafe(24)
+        self.token = (token or os.environ.get("MILELIK_WEB_TOKEN")
+                      or load_or_create_web_token())
         self.workspace = Workspace(workspace)
         self.frontend_dir = FRONTEND_DIR
         self.svg_images_dir = SVG_IMAGES_DIR
@@ -1531,8 +1571,9 @@ class MilelikHandler(BaseHTTPRequestHandler):
     def _require_auth(self):
         if not self._authenticated():
             raise ApiError(
-                "Missing or invalid Milelik API token. Send it in the "
-                f"{TOKEN_HEADER} header.", HTTPStatus.UNAUTHORIZED)
+                "Missing or invalid Milelik API token. Reopen Milelik from "
+                "the terminal link, or paste the token in "
+                "Preferences \u2192 Connection.", HTTPStatus.UNAUTHORIZED)
         origin = self.headers.get("Origin")
         if origin and self.command in ("POST", "PUT", "PATCH", "DELETE"):
             origin_host = urllib.parse.urlparse(origin).netloc
@@ -1598,8 +1639,7 @@ class MilelikHandler(BaseHTTPRequestHandler):
                 if token:
                     if not secrets.compare_digest(token, self.state.token):
                         raise ApiError("Invalid Milelik front-end token.", HTTPStatus.UNAUTHORIZED)
-                    cookie = (f"{TOKEN_COOKIE}={self.state.token}; Path=/; HttpOnly; "
-                              "SameSite=Strict")
+                    cookie = web_auth_cookie(self.state.token)
                     self.send_response(HTTPStatus.FOUND)
                     self.send_header("Location", "/")
                     self.send_header("Set-Cookie", cookie)

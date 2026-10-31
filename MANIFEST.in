@@ -1,6 +1,8 @@
 graft frontend
 graft svg-images
 graft dependencies
+graft ollama
+graft engine
 graft docs
 include models/README.md models/.gitkeep models/LICENSE-SmolLM2-Apache-2.0.txt
 include app.py install_milelik.py setup_model.py setup_milelik.py uninstall_milelik.py

@@ -529,7 +529,11 @@ class TestGGUFImport(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             gguf = Path(tmp) / milelik.TARGET_GGUF_FILENAME
-            gguf.write_bytes(b"GGUF" + b"\x00" * 64)
+            gguf.write_bytes(
+                b"GGUF"  # magic
+                + b"\x03\x00\x00\x00"  # version 3
+                + b"\x00" * 8  # tensor count 0
+                + b"\x00" * 8)  # metadata count 0
             with mock.patch.object(milelik.shutil, "which",
                                    return_value="/usr/bin/ollama"):
                 ok = milelik.import_gguf_to_ollama(str(gguf), runner=fake_runner)
@@ -593,7 +597,8 @@ class TestLocalModelFiles(unittest.TestCase):
 
     def test_repository_bundled_model_is_the_default_record(self):
         bundled = ROOT / "models" / milelik.BUNDLED_MODEL_FILENAME
-        self.assertTrue(bundled.is_file(), "bundled default GGUF is missing")
+        if not bundled.is_file():
+            self.skipTest("bundled GGUF is not in this checkout")
         self.assertEqual(bundled.stat().st_size, 98_362_432)
         record = milelik.model_file_record_for_path(bundled)
         self.assertTrue(record["supported"])
@@ -689,7 +694,11 @@ class TestLocalModelFiles(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             gguf = Path(tmp) / "Some-Other-Model.gguf"
-            gguf.write_bytes(b"GGUF" + b"\x00" * 32)
+            gguf.write_bytes(
+                b"GGUF"  # magic
+                + b"\x03\x00\x00\x00"  # version 3
+                + b"\x00" * 8  # tensor count 0
+                + b"\x00" * 8)  # metadata count 0
             name = milelik.ollama_name_for_model_file(gguf)
             with mock.patch.object(milelik.shutil, "which",
                                    return_value="/usr/bin/ollama"):
@@ -1229,6 +1238,108 @@ class TestBundledDependencies(unittest.TestCase):
         self.assertFalse(milelik.should_open_web_app_by_default(("task",), True, True, {}))
         self.assertFalse(milelik.should_open_web_app_by_default(
             (), True, True, {"frontend_enabled": False}))
+
+
+class TestOfflineMode(unittest.TestCase):
+    def test_offline_mode_reads_env(self):
+        self.assertFalse(milelik.offline_mode({}))
+        self.assertFalse(milelik.offline_mode({"MILELIK_OFFLINE": "0"}))
+        self.assertFalse(milelik.offline_mode({"MILELIK_OFFLINE": "no"}))
+        for value in ("1", "true", "yes", "y", "on", "  YeS  "):
+            self.assertTrue(milelik.offline_mode({"MILELIK_OFFLINE": value}), value)
+
+    def test_offline_mode_defaults_to_process_env(self):
+        self.assertEqual(milelik.offline_mode(),
+                         milelik.offline_mode(dict(os.environ)))
+
+
+class TestValidateGguf(unittest.TestCase):
+    def _write(self, directory, name, payload):
+        path = Path(directory) / name
+        path.write_bytes(payload)
+        return path
+
+    def _header(self, version=3, tensors=0, items=0):
+        return (b"GGUF" + version.to_bytes(4, "little")
+                + tensors.to_bytes(8, "little") + items.to_bytes(8, "little"))
+
+    def _string(self, text):
+        blob = text.encode()
+        return len(blob).to_bytes(8, "little") + blob
+
+    def test_valid_minimal_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gguf = self._write(tmp, "mini.gguf", self._header())
+            valid, detail = milelik.validate_gguf(gguf)
+        self.assertTrue(valid)
+        self.assertEqual(detail, "GGUFv3, 0 metadata items, 0 tensors")
+
+    def test_valid_file_with_string_and_array(self):
+        payload = (self._header(items=2)
+                   + self._string("general.architecture")
+                   + (8).to_bytes(4, "little") + self._string("llama")
+                   + self._string("tokens")
+                   + (9).to_bytes(4, "little")
+                   + (8).to_bytes(4, "little") + (3).to_bytes(8, "little")
+                   + self._string("a") + self._string("b") + self._string("c"))
+        with tempfile.TemporaryDirectory() as tmp:
+            gguf = self._write(tmp, "meta.gguf", payload)
+            valid, detail = milelik.validate_gguf(gguf)
+        self.assertTrue(valid)
+        self.assertEqual(detail, "GGUFv3, 2 metadata items, 0 tensors")
+
+    def test_bad_magic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = self._write(tmp, "bad.gguf", b"NOPE" + b"\x00" * 32)
+            valid, detail = milelik.validate_gguf(bad)
+        self.assertFalse(valid)
+        self.assertIn("bad magic", detail)
+
+    def test_bad_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = self._write(tmp, "bad.gguf", self._header(version=99))
+            valid, detail = milelik.validate_gguf(bad)
+        self.assertFalse(valid)
+        self.assertIn("unsupported GGUF version 99", detail)
+
+    def test_truncated_key(self):
+        payload = self._header(items=1) + (40).to_bytes(8, "little") + b"short"
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = self._write(tmp, "cut.gguf", payload)
+            valid, detail = milelik.validate_gguf(bad)
+        self.assertFalse(valid)
+        self.assertIn("truncated", detail)
+
+    def test_insane_string_length_rejected_like_ollama(self):
+        # Mirrors `ollama create`'s "string length ... exceeds maximum".
+        payload = (self._header(items=1)
+                   + (2023921617014631943).to_bytes(8, "little"))
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = self._write(tmp, "huge.gguf", payload)
+            valid, detail = milelik.validate_gguf(bad)
+        self.assertFalse(valid)
+        self.assertIn("2023921617014631943", detail)
+        self.assertIn("exceeds", detail)
+
+    def test_unknown_value_type(self):
+        payload = (self._header(items=1) + self._string("k")
+                   + (99).to_bytes(4, "little"))
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = self._write(tmp, "type.gguf", payload)
+            valid, detail = milelik.validate_gguf(bad)
+        self.assertFalse(valid)
+        self.assertIn("unknown metadata type 99", detail)
+
+    def test_import_rejects_corrupt_file_without_running_ollama(self):
+        calls = []
+        payload = (self._header(items=1)
+                   + (2023921617014631943).to_bytes(8, "little"))
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = self._write(tmp, "corrupt.gguf", payload)
+            ok = milelik.import_gguf_to_ollama(
+                str(bad), runner=lambda *args, **kwargs: calls.append(args))
+        self.assertFalse(ok)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

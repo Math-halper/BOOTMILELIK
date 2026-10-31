@@ -879,6 +879,144 @@ def _gguf_shards(path: Path) -> list[Path]:
             found.append(candidate)
     return sorted(found, key=lambda item: (_split_gguf_info(item) or ("", 99999, 0))[1])
 
+GGUF_MAX_STRING = 16 * 1024 * 1024  # same cap Ollama enforces when parsing
+GGUF_MAX_METADATA_ITEMS = 100_000
+GGUF_MAX_TENSORS = 10_000_000
+GGUF_MAX_ARRAY_ITEMS = 10_000_000
+GGUF_MAX_METADATA_BYTES = 256 * 1024 * 1024
+
+
+def validate_gguf(path) -> tuple[bool, str]:
+    """Check a GGUF file's header/metadata without reading tensor data.
+
+    Returns (True, summary) for a usable file, (False, reason) otherwise.
+    Corrupt or truncated downloads fail here in milliseconds instead of
+    after `ollama create` copies gigabytes first.
+    """
+    scalar_sizes = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1,
+                    10: 8, 11: 8, 12: 8}
+    try:
+        fh = open(path, "rb")
+    except OSError as e:
+        return False, f"cannot read file: {e}"
+    try:
+        fh.seek(0, os.SEEK_END)
+        file_size = fh.tell()
+        fh.seek(0)
+        if file_size < 4:
+            return False, f"file holds only {file_size} bytes (truncated?)"
+
+        def fail(reason):
+            return False, f"{reason} at byte {fh.tell()}"
+
+        def read(fmt):
+            size = struct.calcsize(fmt)
+            data = fh.read(size)
+            if len(data) != size:
+                raise EOFError
+            return struct.unpack(fmt, data)[0]
+
+        if fh.read(4) != b"GGUF":
+            return False, "bad magic (not a GGUF file)"
+        try:
+            version = read("<I")
+        except EOFError:
+            return False, "truncated header (incomplete download?)"
+        if version == 1:
+            count_fmt, length_fmt = "<I", "<I"
+        elif version in (2, 3):
+            count_fmt, length_fmt = "<Q", "<Q"
+        else:
+            return fail(f"unsupported GGUF version {version}")
+        try:
+            tensor_count = read(count_fmt)
+            kv_count = read(count_fmt)
+        except EOFError:
+            return False, "truncated header (incomplete download?)"
+        if tensor_count > GGUF_MAX_TENSORS:
+            return fail(f"tensor count {tensor_count} looks corrupt")
+        if kv_count > GGUF_MAX_METADATA_ITEMS:
+            return fail(f"metadata item count {kv_count} looks corrupt")
+
+        def read_string(what):
+            length = read(length_fmt)
+            if length > GGUF_MAX_STRING:
+                raise ValueError(
+                    f"{what}: string length {length} exceeds "
+                    f"{GGUF_MAX_STRING} (file is corrupt)")
+            data = fh.read(length)
+            if len(data) != length:
+                raise EOFError
+            return data.decode("utf-8", errors="replace")
+
+        def skip_value(value_type, what, depth=0):
+            if value_type == 8:  # string
+                read_string(what)
+                return
+            if value_type == 9:  # array
+                if depth > 4:
+                    raise ValueError(f"{what}: metadata nested too deeply")
+                element_type = read("<I")
+                count = read(length_fmt)
+                if count > GGUF_MAX_ARRAY_ITEMS:
+                    raise ValueError(
+                        f"{what}: array length {count} looks corrupt")
+                width = scalar_sizes.get(element_type)
+                if width is not None:  # bulk-skip scalar arrays
+                    blob = fh.read(count * width)
+                    if len(blob) != count * width:
+                        raise EOFError
+                    return
+                for _ in range(count):
+                    skip_value(element_type, what, depth + 1)
+                    if fh.tell() > GGUF_MAX_METADATA_BYTES:
+                        raise ValueError(
+                            f"{what}: metadata section is implausibly large")
+                return
+            size = scalar_sizes.get(value_type)
+            if size is None:
+                raise ValueError(f"{what}: unknown metadata type {value_type}")
+            if len(fh.read(size)) != size:
+                raise EOFError
+
+        try:
+            for index in range(kv_count):
+                what = f"metadata item {index}"
+                key = read_string(what)
+                value_type = read("<I")
+                skip_value(value_type, f"{what} (key {key!r})")
+                if fh.tell() > GGUF_MAX_METADATA_BYTES:
+                    return fail("metadata section is implausibly large")
+            if version in (2, 3):
+                for index in range(tensor_count):
+                    what = f"tensor {index}"
+                    read_string(what)
+                    n_dims = read("<I")
+                    if n_dims > 32:
+                        return fail(
+                            f"{what}: dimension count {n_dims} looks corrupt")
+                    for _ in range(n_dims):
+                        read("<I")
+                    dtype = read("<I")
+                    if dtype > 64:
+                        return fail(
+                            f"{what}: data type {dtype} looks corrupt")
+                    read("<Q")  # data offset
+                    if fh.tell() > GGUF_MAX_METADATA_BYTES:
+                        return fail("tensor headers are implausibly large")
+        except EOFError:
+            return False, f"truncated at byte {fh.tell()} (incomplete download?)"
+        except ValueError as e:
+            return False, str(e)
+        if tensor_count and file_size <= fh.tell():
+            return False, (f"no tensor data after byte {fh.tell()} "
+                           f"(file truncated at {file_size} bytes?)")
+        return True, (f"GGUFv{version}, {kv_count} metadata items, "
+                      f"{tensor_count} tensors")
+    finally:
+        fh.close()
+
+
 def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODEL,
                           runner=None) -> bool:
     """Import a local GGUF into Ollama, using Qwen's template only for Qwen."""
@@ -896,6 +1034,13 @@ def import_gguf_to_ollama(gguf_path: str, ollama_name: str = LOCAL_IMPORTED_MODE
     if magic != b"GGUF":
         err(f"{path} does not look like a GGUF file (bad header).")
         return False
+    valid, detail = validate_gguf(path)
+    if not valid:
+        err(f"{path.name} is not a usable GGUF file: {detail}.")
+        err("The file is corrupt or incompletely downloaded. Re-download it,")
+        err("then run the import again (nothing was sent to Ollama).")
+        return False
+    info(f"GGUF header check passed: {detail}.")
     if not re.fullmatch(r"[A-Za-z0-9._/-]+(?::[A-Za-z0-9._-]+)?", ollama_name or ""):
         err(f"Invalid Ollama model name: {ollama_name!r}")
         return False
@@ -5052,6 +5197,13 @@ def launch_frontend(args) -> int:
         print("\nMilelik front end stopped.")
         return 130
 
+def offline_mode(env=None) -> bool:
+    """True when Milelik must not download anything (MILELIK_OFFLINE=1)."""
+    source = os.environ if env is None else env
+    return str(source.get("MILELIK_OFFLINE", "")).strip().lower() in (
+        "1", "true", "yes", "y", "on")
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
 
@@ -5254,6 +5406,10 @@ def main(argv=None) -> int:
                 return 1
             print("Already have the GGUF file? Press n, then run:  "
                   "python3 setup_model.py /path/to/model.gguf")
+            if offline_mode():
+                print("Offline mode (MILELIK_OFFLINE=1): not downloading "
+                      f"'{client.model}'.")
+                return 1
             if sys.stdin.isatty():
                 try:
                     ans = input(f"Download it now with `ollama pull {client.model}`? "

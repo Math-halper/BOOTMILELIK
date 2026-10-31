@@ -12,7 +12,8 @@ and install by hand.
 | Core system packages | [`apt-required.txt`](apt-required.txt) | [`install_dependencies.py`](install_dependencies.py) |
 | VLC/media, desktop, LibreOffice, Git/GitHub, Node/npm and Python project packages | [`apt-tools.txt`](apt-tools.txt) | `install_dependencies.py` (the default full mode) |
 | Extra fallback programs | [`apt-optional.txt`](apt-optional.txt) | `install_dependencies.py --with-optional` |
-| Ollama runtime | Python bootstrap logic in [`../install_milelik.py`](../install_milelik.py) | The main Python installer |
+| Bundled inference engine (no Ollama needed) | CPU `llama-server` binary built from ggml-org/llama.cpp + [`../engine/serve.py`](../engine/serve.py) + [`../engine/ollama_compat.py`](../engine/ollama_compat.py) — see [`../engine/README.md`](../engine/README.md) | `python3 engine/serve.py` (or `milelik-engine` after install) |
+| Ollama runtime (optional, GPU-capable) | Actual release bytes vendored as verified chunks in [`../ollama/vendor/`](../ollama/README.md) (`fetch_ollama.py` to vendor, `setup_ollama.py --offline` to install), plus the pinned [`../ollama/ollama.json`](../ollama/ollama.json) manifest reused by [`../install_milelik.py`](../install_milelik.py) | `python3 ollama/setup_ollama.py --offline`, or the main Python installer |
 | Qwen2.5-Coder model | Model identity/template/setup logic in [`../milelik.py`](../milelik.py), [`../setup_model.py`](../setup_model.py) and [`../Modelfile.qwen2.5-coder-abliterated`](../Modelfile.qwen2.5-coder-abliterated), plus the user-supplied [`../models/`](../models/) folder read at startup | The main installer / Milelik startup discovery, from an existing GGUF or the Ollama library |
 | LM Studio / llama.cpp | Optional alternative model servers detected by `milelik.py` | The user, only if they prefer them to Ollama |
 
@@ -63,4 +64,9 @@ model weights: Milelik's Python installer downloads/imports them from
 their upstream distribution points, or imports the user's existing
 `Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf`, rather than storing
 those artifacts in Git. The small bundled SmolLM2 GGUF is the exception
-and is already in `models/`.
+and is already in `models/`. The Ollama release itself is vendored as
+verified ~90 MB chunks under [`../ollama/vendor/`](../ollama/README.md)
+(one-time `fetch_ollama.py` on a machine with internet), so fresh
+machines install it with zero downloads; the pinned
+[`../ollama/ollama.json`](../ollama/ollama.json) manifest keeps the
+download fallback reproducible too.

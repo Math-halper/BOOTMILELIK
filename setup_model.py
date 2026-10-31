@@ -5,6 +5,7 @@ Examples:
     python3 setup_model.py
     python3 setup_model.py /path/to/model.gguf
     python3 setup_model.py --download
+    python3 setup_model.py --validate /path/to/model.gguf
 
 With a GGUF (given, or the bundled file found in Milelik's models/ folders),
 this imports the file into Ollama with an appropriate template. The bundled
@@ -150,6 +151,8 @@ def parse_args(argv=None, environ=None):
                         help="GGUF file (or a folder containing it)")
     parser.add_argument("--download", action="store_true",
                         help="download smollm2:135m from Ollama instead")
+    parser.add_argument("--validate", action="store_true",
+                        help="only check the GGUF header/metadata, do not import")
     parser.add_argument("--import-name", default=env.get("OLLAMA_NAME", ""),
                         help="Ollama name for an imported GGUF")
     parser.add_argument("--models-dir",
@@ -173,6 +176,19 @@ def main(argv=None, *, runner=subprocess.run, which=shutil.which,
     if gguf is None:
         gguf = find_gguf(root=root, models_dir=args.models_dir,
                          home=home, cwd=cwd)
+
+    if args.validate:
+        if gguf is None or not gguf.is_file():
+            print("No GGUF file to validate. Pass one explicitly:")
+            print("  python3 setup_model.py --validate /path/to/model.gguf")
+            return 1
+        if core is None or not hasattr(core, "validate_gguf"):
+            print("Cannot validate without milelik.py beside setup_model.py.")
+            return 1
+        valid, detail = core.validate_gguf(gguf)
+        print(f"{'VALID' if valid else 'INVALID'}: {gguf}")
+        print(detail)
+        return 0 if valid else 1
 
     milelik_py = root / "milelik.py"
     if gguf is not None and gguf.is_file():
